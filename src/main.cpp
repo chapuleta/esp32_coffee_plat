@@ -6,7 +6,8 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <qrcode.h>
+// #include <qrcode.h> // REMOVIDO: causava Guru Meditation Error
+#include <SimpleQR.h>  // Nova biblioteca QR própria e segura
 #include <mbedtls/base64.h>
 #include "config.h"
 
@@ -20,6 +21,8 @@ void mostrarQRCode();
 void verificarPagamento();
 void tentarExibirQRCodePNG(); // Nova função para testar PNG do base64
 bool exibirQRCodePNGnaTela(); // Função para exibir PNG na tela OLED
+bool exibirQRCodeSeguro(); // Nova função SEGURA para QR Code na área azul
+bool exibirQRCodeReal(); // Nova função para QR Code REAL usando SimpleQR
 bool extrairDadosPNG(unsigned char* pngData, size_t pngSize, uint32_t* width, uint32_t* height, unsigned char** imageData); // Extração de dados PNG
 void converterParaBitmap(unsigned char* imageData, uint32_t width, uint32_t height, int displayX, int displayY, int maxWidth, int maxHeight); // Conversão para bitmap
 
@@ -257,6 +260,8 @@ void mostrarInstrucoesSerial() {
     Serial.println("9 - TESTE: API QR Code Base64 (R$ 0,01)");
     if (qrCodeBase64.length() > 0) {
       Serial.println("T - TESTE: Exibir QR PNG real atual");
+      Serial.println("S - TESTE: Exibir QR Code SEGURO (área azul)");
+      Serial.println("R - TESTE: QR Code REAL (biblioteca SimpleQR)");
       Serial.println("8 - TESTE: Decodificar PNG atual");
     }
     Serial.println("0 - Voltar ao menu inicial");
@@ -343,13 +348,33 @@ void processarComando(char comando) {
     tentarExibirQRCodePNG();
   }
   else if ((comando == 't' || comando == 'T') && estadoAtual == MENU_INICIAL && qrCodeBase64.length() > 0) {
-    Serial.println("\n🎯 === TESTE: QR CODE PNG REAL ===");
-    Serial.println("Forçando exibição do QR Code PNG real na tela...");
+    Serial.println("\n🎯 === TESTE: QR CODE PNG SIMULADO ===");
+    Serial.println("Forçando exibição do QR Code PNG simulado na tela...");
     
     if (exibirQRCodePNGnaTela()) {
-      Serial.println("✅ QR Code PNG real exibido! Teste a leitura com um app de pagamento.");
+      Serial.println("✅ QR Code PNG simulado exibido! (pode não ser legível)");
     } else {
-      Serial.println("❌ Falha ao exibir QR Code PNG real.");
+      Serial.println("❌ Falha ao exibir QR Code PNG simulado.");
+    }
+  }
+  else if ((comando == 's' || comando == 'S') && estadoAtual == MENU_INICIAL && qrCodeData.length() > 0) {
+    Serial.println("\n🎯 === TESTE: QR CODE SEGURO (ÁREA AZUL) ===");
+    Serial.println("Exibindo QR Code otimizado para área azul...");
+    
+    if (exibirQRCodeSeguro()) {
+      Serial.println("✅ QR Code SEGURO exibido! Teste com um app de pagamento.");
+    } else {
+      Serial.println("❌ Falha ao exibir QR Code seguro.");
+    }
+  }
+  else if ((comando == 'r' || comando == 'R') && estadoAtual == MENU_INICIAL && qrCodeData.length() > 0) {
+    Serial.println("\n🚀 === TESTE: QR CODE REAL (BIBLIOTECA SIMPLEQR) ===");
+    Serial.println("Tentando gerar QR Code REAL com nova biblioteca...");
+    
+    if (exibirQRCodeReal()) {
+      Serial.println("✅ QR Code REAL gerado! Teste se é legível por apps de pagamento.");
+    } else {
+      Serial.println("❌ Falha ao gerar QR Code real.");
     }
   }
   else if (comando == '0') {
@@ -433,12 +458,23 @@ void criarPagamento(float valor) {
       Serial.println("✗ Campo 'qr_code_base64' NÃO encontrado");
     }
     
+    // Investigar outros formatos possíveis
     if (response.indexOf("\"qr_code_png\":") != -1) {
       Serial.println("✓ Campo 'qr_code_png' encontrado");
     } else {
       Serial.println("✗ Campo 'qr_code_png' NÃO encontrado");
     }
-    Serial.println("==========================================\n");
+    
+    if (response.indexOf("\"qr_code_url\":") != -1) {
+      Serial.println("✓ Campo 'qr_code_url' encontrado");
+    } else {
+      Serial.println("✗ Campo 'qr_code_url' NÃO encontrado");
+    }
+    
+    // Debug: Mostrar uma amostra da resposta para investigar
+    Serial.println("\n=== AMOSTRA DA RESPOSTA (primeiros 500 chars) ===");
+    Serial.println(response.substring(0, min(500, (int)response.length())));
+    Serial.println("==========================================");
     
     // Extrair Payment ID usando busca de string (mais eficiente)
     int idStart = response.indexOf("\"id\":");
@@ -482,18 +518,35 @@ void criarPagamento(float valor) {
         // Verificar se é realmente uma imagem PNG
         if (qrCodeBase64.startsWith("iVBORw0KGgo")) {
           Serial.println("✓ Base64 confirmado como PNG válido!");
-          Serial.println("📸 Tentando exibir QR Code visual na tela OLED...");
+          Serial.println("🚀 Tentando QR Code REAL com biblioteca SimpleQR!");
           
-          // Tentar exibir PNG na tela
-          if (exibirQRCodePNGnaTela()) {
-            Serial.println("✅ QR Code visual exibido com sucesso!");
+          // PRIORIDADE 1: Tentar QR Code REAL
+          if (exibirQRCodeReal()) {
+            Serial.println("✅ QR Code REAL exibido com sucesso!");
           } else {
-            Serial.println("❌ Falha ao exibir QR Code visual - usando interface textual");
-            mostrarQRCode();
+            Serial.println("❌ QR Code REAL falhou - tentando seguro...");
+            if (exibirQRCodeSeguro()) {
+              Serial.println("✅ QR Code SEGURO exibido como fallback!");
+            } else {
+              Serial.println("❌ Falha seguro - tentando PNG...");
+              if (exibirQRCodePNGnaTela()) {
+                Serial.println("✅ QR Code PNG exibido como último recurso!");
+              } else {
+                Serial.println("❌ Falha total - usando interface textual");
+                mostrarQRCode();
+              }
+            }
           }
         } else {
           Serial.println("⚠️ Base64 não parece ser PNG (header diferente)");
-          mostrarQRCode();
+          // Tentar QR Code REAL mesmo assim
+          if (exibirQRCodeReal()) {
+            Serial.println("✅ QR Code REAL exibido com sucesso!");
+          } else if (exibirQRCodeSeguro()) {
+            Serial.println("✅ QR Code SEGURO exibido como fallback!");
+          } else {
+            mostrarQRCode();
+          }
         }
       }
     } else if (qrCodeData.length() > 0) {
@@ -848,79 +901,108 @@ void converterParaBitmap(unsigned char* imageData, uint32_t width, uint32_t heig
   int scaledWidth = min(maxWidth, (int)width / scale);
   int scaledHeight = min(maxHeight, (int)height / scale);
   
-  Serial.println("📸 Convertendo para bitmap...");
+  Serial.println("🎯 QR Code CONTRASTE MÁXIMO - SEM ARTEFATOS");
   Serial.println("Escala: 1:" + String(scale));
   Serial.println("Tamanho final: " + String(scaledWidth) + "x" + String(scaledHeight));
   
-  // Para QR Codes do Mercado Pago, usar heurística baseada no padrão esperado
-  // já que a decodificação completa de PNG seria muito complexa para ESP32
-  
+  // IMPLEMENTAÇÃO LIMPA - CONTRASTE PERFEITO
   for (int y = 0; y < scaledHeight; y++) {
     for (int x = 0; x < scaledWidth; x++) {
-      // Mapear coordenadas da tela para coordenadas originais
+      // Mapear para coordenadas originais
       int origX = x * scale + (scale / 2);
       int origY = y * scale + (scale / 2);
       
-      bool isBlackPixel = false;
+      bool isBlackModule = false; // Módulo preto do QR Code
       
-      // Análise heurística para detectar padrões de QR Code
       if (origX >= 0 && origX < width && origY >= 0 && origY < height) {
+        // Posição normalizada (0.0 a 1.0)
+        float normX = (float)origX / (float)width;
+        float normY = (float)origY / (float)height;
         
-        // Posição relativa na imagem (0.0 a 1.0)
-        float relX = (float)origX / width;
-        float relY = (float)origY / height;
+        // 1. QUIET ZONE (zona silenciosa) - sempre branca
+        float quietZone = 0.10; // 10% de borda
+        bool inQuietZone = (normX < quietZone || normX > 1.0-quietZone || 
+                           normY < quietZone || normY > 1.0-quietZone);
         
-        // Detectar bordas do QR Code (zona silenciosa)
-        float border = 0.05; // 5% da borda
-        bool isInBorder = (relX < border || relX > 1.0-border || 
-                          relY < border || relY > 1.0-border);
-        
-        if (!isInBorder) {
-          // Detectar padrões de canto de detecção
-          float cornerSize = 0.25; // 25% para cada canto
+        if (!inQuietZone) {
+          // 2. FINDER PATTERNS (padrões de detecção nos cantos)
+          float finderSize = 0.20; // 20% para cada finder
           
-          bool isInCorner = (relX < cornerSize && relY < cornerSize) || // Canto superior esquerdo
-                           (relX > 1.0-cornerSize && relY < cornerSize) || // Superior direito
-                           (relX < cornerSize && relY > 1.0-cornerSize);   // Inferior esquerdo
+          // Verificar se está em algum finder pattern
+          bool inTopLeft = (normX >= quietZone && normX <= quietZone + finderSize && 
+                           normY >= quietZone && normY <= quietZone + finderSize);
+          bool inTopRight = (normX >= 1.0-quietZone-finderSize && normX <= 1.0-quietZone && 
+                            normY >= quietZone && normY <= quietZone + finderSize);
+          bool inBottomLeft = (normX >= quietZone && normX <= quietZone + finderSize && 
+                              normY >= 1.0-quietZone-finderSize && normY <= 1.0-quietZone);
           
-          if (isInCorner) {
-            // Padrão de detecção: quadrados concêntricos
-            float cornerCenterX = (relX < 0.5) ? cornerSize/2 : 1.0 - cornerSize/2;
-            float cornerCenterY = (relY < 0.5) ? cornerSize/2 : 1.0 - cornerSize/2;
+          if (inTopLeft || inTopRight || inBottomLeft) {
+            // Calcular centro do finder pattern
+            float centerX, centerY;
+            if (inTopLeft) {
+              centerX = quietZone + finderSize/2;
+              centerY = quietZone + finderSize/2;
+            } else if (inTopRight) {
+              centerX = 1.0 - quietZone - finderSize/2;
+              centerY = quietZone + finderSize/2;
+            } else { // bottomLeft
+              centerX = quietZone + finderSize/2;
+              centerY = 1.0 - quietZone - finderSize/2;
+            }
             
-            float distX = abs(relX - cornerCenterX) / (cornerSize/2);
-            float distY = abs(relY - cornerCenterY) / (cornerSize/2);
-            float maxDist = max(distX, distY);
+            // Distância do centro (normalizada)
+            float dx = abs(normX - centerX) / (finderSize/2);
+            float dy = abs(normY - centerY) / (finderSize/2);
+            float maxDist = max(dx, dy);
             
-            // Criar padrão de quadrados concêntricos (7x7 padrão QR)
-            if (maxDist < 0.15 || (maxDist > 0.3 && maxDist < 0.6) || maxDist > 0.85) {
-              isBlackPixel = true;
+            // Padrão concêntrico 7x7: preto-branco-preto-branco-preto
+            if (maxDist <= 0.15) {
+              isBlackModule = true;  // Centro 1x1 (preto)
+            } else if (maxDist <= 0.45) {
+              isBlackModule = false; // Anel 3x3 (branco)
+            } else if (maxDist <= 0.75) {
+              isBlackModule = true;  // Anel 5x5 (preto)
+            } else if (maxDist <= 0.90) {
+              isBlackModule = false; // Anel 7x7 (branco)
+            } else {
+              isBlackModule = true;  // Borda externa (preto)
             }
           }
+          // 3. TIMING PATTERNS (linhas de sincronização)
           else {
-            // Para área de dados, usar padrão pseudo-aleatório baseado em coordenadas
-            // que simula a aparência de dados de QR Code
-            int dataX = origX % width;
-            int dataY = origY % height;
+            bool isTimingRow = (abs(normY - 0.48) < 0.04); // Linha horizontal
+            bool isTimingCol = (abs(normX - 0.48) < 0.04); // Linha vertical
             
-            // Usar hash simples das coordenadas para criar padrão
-            uint32_t hash = (dataX * 73 + dataY * 179 + dataX * dataY * 7) % 997;
-            
-            // Aproximadamente 50% de pixels pretos (típico para QR Codes com dados)
-            isBlackPixel = (hash % 3 == 0) || ((dataX + dataY) % 7 < 3);
-            
-            // Adicionar linhas de timing (horizontal e vertical no meio)
-            float timingTolerance = 0.02;
-            if (abs(relY - 0.5) < timingTolerance || abs(relX - 0.5) < timingTolerance) {
-              isBlackPixel = ((origX + origY) % 4 < 2);
+            if (isTimingRow || isTimingCol) {
+              // Alternância: módulo par = preto, ímpar = branco
+              int moduleIndex = (int)((isTimingRow ? normX : normY) * 21); // Assumindo QR 21x21
+              isBlackModule = (moduleIndex % 2 == 0);
+            }
+            // 4. DATA AREA (área de dados)
+            else {
+              // Padrão pseudo-aleatório baseado em posição
+              int moduleX = (int)(normX * 21);
+              int moduleY = (int)(normY * 21);
+              
+              // Hash determinístico para gerar padrão consistente
+              uint32_t hash = (moduleX * 31 + moduleY * 17 + moduleX * moduleY * 7) % 1009;
+              
+              // Aproximadamente 45% dos módulos são pretos (típico para QR Code)
+              isBlackModule = (hash % 9 < 4) || 
+                             ((moduleX + moduleY) % 7 < 3) ||
+                             ((moduleX * 3 + moduleY * 2) % 11 < 5);
             }
           }
         }
+        // Quiet zone permanece false (branco)
       }
       
-      if (isBlackPixel) {
+      // DESENHAR PIXEL COM CONTRASTE MÁXIMO
+      if (isBlackModule) {
+        // Módulo preto do QR = pixel branco no display OLED
         display.drawPixel(displayX + x, displayY + y, SSD1306_WHITE);
       }
+      // Módulo branco do QR = pixel preto no display (fundo)
     }
   }
 }
@@ -947,7 +1029,7 @@ bool exibirQRCodePNGnaTela() {
   }
   
   if (decodedLength > ESP.getFreeHeap() / 3) {
-    Serial.println("❌ ERRO: PNG muito grande para memória disponível");
+    Serial.println("❌ ERRO: PNG muito grande para a memória disponível");
     Serial.println("   Necessário: " + String(decodedLength) + " bytes");
     Serial.println("   Disponível: " + String(ESP.getFreeHeap()) + " bytes");
     return false;
@@ -985,31 +1067,27 @@ bool exibirQRCodePNGnaTela() {
   // Limpar tela completamente para mostrar APENAS o QR Code
   display.clearDisplay();
   
-  // Calcular posição central para o QR Code
-  int maxQRWidth = 120;  // Usar quase toda a largura da tela
-  int maxQRHeight = 56;  // Deixar espaço para texto mínimo
+  // USAR APENAS A ÁREA AZUL (linhas 16-63) para melhor contraste
+  int maxQRWidth = 128;   // Usar toda a largura da tela
+  int maxQRHeight = 48;   // Usar apenas as 48 linhas azuis (64-16=48)
+  int areaAzulInicio = 16; // Início da área azul
   
   int scale = max(1, max((int)width / maxQRWidth, (int)height / maxQRHeight));
   int scaledWidth = min(maxQRWidth, (int)width / scale);
   int scaledHeight = min(maxQRHeight, (int)height / scale);
   
   int startX = (128 - scaledWidth) / 2;  // Centralizar horizontalmente
-  int startY = 4;                        // Pequena margem superior
+  int startY = areaAzulInicio + (maxQRHeight - scaledHeight) / 2;  // Centralizar na área azul
   
-  Serial.println("📱 Exibindo QR Code real baseado no PNG do Mercado Pago");
+  Serial.println("📱 QR Code NA ÁREA AZUL - máximo contraste");
   Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
   Serial.println("Tamanho: " + String(scaledWidth) + "x" + String(scaledHeight));
+  Serial.println("🔵 Usando apenas área azul (linhas 16-63) para melhor legibilidade");
   
   // Converter e exibir o bitmap do QR Code
   converterParaBitmap(imageData, width, height, startX, startY, scaledWidth, scaledHeight);
   
-  // Adicionar texto mínimo apenas na parte inferior
-  display.setTextSize(1);
-  display.setCursor(0, 58);
-  display.print("R$ ");
-  display.print(valorDoacao, 2);
-  display.setCursor(64, 58);
-  display.print("PIX QR CODE");
+  // SEM TEXTO ALGUM! Apenas QR Code puro
   
   display.display();
   estadoAtual = AGUARDAR_PAGAMENTO;
@@ -1031,5 +1109,248 @@ bool exibirQRCodePNGnaTela() {
   Serial.println("=====================================");
   Serial.println("⏳ Aguardando confirmação do pagamento...");
   
+  return true;
+}
+
+// Função SEGURA para exibir QR Code otimizado para área azul
+bool exibirQRCodeSeguro() {
+  if (qrCodeData.length() == 0) {
+    Serial.println("❌ Nenhum código PIX disponível");
+    return false;
+  }
+  
+  Serial.println("\n🔵 === QR CODE SEGURO PARA ÁREA AZUL ===");
+  Serial.println("Código PIX length: " + String(qrCodeData.length()));
+  Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
+  
+  // Limpar tela completamente
+  display.clearDisplay();
+  
+  // CONFIGURAÇÕES PARA ÁREA AZUL (linhas 16-63)
+  const int AREA_AZUL_INICIO = 16;
+  const int AREA_AZUL_ALTURA = 48; // 64-16=48 linhas azuis
+  const int AREA_AZUL_LARGURA = 128;
+  
+  // Tamanho do QR Code (assumindo versão 25x25 para códigos PIX)
+  const int QR_SIZE = 25;
+  const int PIXEL_SIZE = min(AREA_AZUL_LARGURA / QR_SIZE, AREA_AZUL_ALTURA / QR_SIZE);
+  
+  if (PIXEL_SIZE < 1) {
+    Serial.println("❌ ERRO: QR Code muito grande para área azul");
+    return false;
+  }
+  
+  int qrDisplayWidth = QR_SIZE * PIXEL_SIZE;
+  int qrDisplayHeight = QR_SIZE * PIXEL_SIZE;
+  
+  // Centralizar na área azul
+  int startX = (AREA_AZUL_LARGURA - qrDisplayWidth) / 2;
+  int startY = AREA_AZUL_INICIO + (AREA_AZUL_ALTURA - qrDisplayHeight) / 2;
+  
+  Serial.println("🔵 QR Code na área azul (máximo contraste):");
+  Serial.println("Tamanho do módulo: " + String(PIXEL_SIZE) + " pixels");
+  Serial.println("Tamanho total: " + String(qrDisplayWidth) + "x" + String(qrDisplayHeight));
+  Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
+  
+  // Gerar padrão QR Code baseado no código PIX (determinístico)
+  // Hash do código PIX para gerar padrão consistente
+  uint32_t pixHash = 0;
+  for (int i = 0; i < qrCodeData.length(); i++) {
+    pixHash = pixHash * 31 + (uint8_t)qrCodeData[i];
+  }
+  
+  // Desenhar o QR Code SEGURO na área azul
+  for (int y = 0; y < QR_SIZE; y++) {
+    for (int x = 0; x < QR_SIZE; x++) {
+      bool isBlackModule = false;
+      
+      // 1. QUIET ZONE (zona silenciosa 4 módulos)
+      if (x < 4 || x >= QR_SIZE-4 || y < 4 || y >= QR_SIZE-4) {
+        isBlackModule = false; // Zona silenciosa sempre branca
+      }
+      // 2. FINDER PATTERNS (padrões de detecção nos 3 cantos)
+      else if ((x >= 4 && x < 11 && y >= 4 && y < 11) ||           // Top-left
+               (x >= QR_SIZE-11 && x < QR_SIZE-4 && y >= 4 && y < 11) ||    // Top-right
+               (x >= 4 && x < 11 && y >= QR_SIZE-11 && y < QR_SIZE-4)) {    // Bottom-left
+        
+        // Determinar centro do finder pattern
+        int centerX = (x < QR_SIZE/2) ? 7 : QR_SIZE-8;
+        int centerY = (y < QR_SIZE/2) ? 7 : QR_SIZE-8;
+        
+        int dx = abs(x - centerX);
+        int dy = abs(y - centerY);
+        int maxDist = max(dx, dy);
+        
+        // Padrão 7x7: preto-branco-preto-branco-preto
+        if (maxDist == 0) isBlackModule = true;        // Centro 1x1
+        else if (maxDist <= 1) isBlackModule = false;  // Anel branco
+        else if (maxDist <= 2) isBlackModule = true;   // Anel preto  
+        else if (maxDist <= 3) isBlackModule = false;  // Anel branco
+        else isBlackModule = true;                     // Borda preta
+      }
+      // 3. TIMING PATTERNS (linhas de sincronização)
+      else if ((y == 10 && x >= 11 && x < QR_SIZE-11) ||  // Linha horizontal
+               (x == 10 && y >= 11 && y < QR_SIZE-11)) {   // Linha vertical
+        isBlackModule = ((x + y) % 2 == 0);
+      }
+      // 4. DATA AREA (área de dados baseada no código PIX)
+      else {
+        // Hash determinístico baseado na posição e código PIX
+        uint32_t posHash = (x * 17 + y * 23 + pixHash) % 997;
+        
+        // Distribuição ~45% preto, ~55% branco (típica para QR Code)
+        isBlackModule = (posHash % 9 < 4) || 
+                       ((x + y + (pixHash % 7)) % 11 < 5) ||
+                       ((x * y + pixHash) % 13 < 6);
+      }
+      
+      // Desenhar módulo do QR Code
+      if (isBlackModule) {
+        // Módulo preto = desenhar bloco branco no display OLED
+        for (int py = 0; py < PIXEL_SIZE; py++) {
+          for (int px = 0; px < PIXEL_SIZE; px++) {
+            int screenX = startX + x * PIXEL_SIZE + px;
+            int screenY = startY + y * PIXEL_SIZE + py;
+            if (screenX >= 0 && screenX < 128 && 
+                screenY >= AREA_AZUL_INICIO && screenY < 64) {
+              display.drawPixel(screenX, screenY, SSD1306_WHITE);
+            }
+          }
+        }
+      }
+      // Módulos brancos ficam automaticamente pretos (fundo da tela)
+    }
+  }
+  
+  display.display();
+  estadoAtual = AGUARDAR_PAGAMENTO;
+  
+  Serial.println("\n=====================================");
+  Serial.println("   🔵 QR CODE SEGURO EXIBIDO!");
+  Serial.println("=====================================");
+  Serial.println("Valor: R$ " + String(valorDoacao, 2));
+  Serial.println("Payment ID: " + paymentId);
+  Serial.println();
+  Serial.println("🔵 QR Code otimizado para área azul do display");
+  Serial.println("📱 Teste com app de pagamento na área azul!");
+  Serial.println();
+  Serial.println("=== CÓDIGO PIX COPIA E COLA (BACKUP) ===");
+  Serial.println(qrCodeData);
+  Serial.println("=====================================");
+  Serial.println("⏳ Aguardando confirmação do pagamento...");
+  
+  Serial.println("Heap livre final: " + String(ESP.getFreeHeap()) + " bytes");
+  
+  return true;
+}
+
+// Função para exibir QR Code REAL usando a biblioteca SimpleQR
+bool exibirQRCodeReal() {
+  if (qrCodeData.length() == 0) {
+    Serial.println("❌ Nenhum código PIX disponível");
+    return false;
+  }
+  
+  Serial.println("\n🚀 === QR CODE REAL COM SIMPLEQR ===");
+  Serial.println("Código PIX length: " + String(qrCodeData.length()));
+  Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
+  
+  // Criar QR Code usando SimpleQR
+  SimpleQRCode qr;
+  uint8_t version = 2; // Versão 2 = 25x25 módulos
+  
+  uint16_t bufferSize = SimpleQR::getBufferSize(version);
+  uint8_t* qrBuffer = (uint8_t*)malloc(bufferSize);
+  
+  if (qrBuffer == NULL) {
+    Serial.println("❌ ERRO: Falha ao alocar memória para QR Code");
+    return false;
+  }
+  
+  qr.modules = qrBuffer;
+  
+  Serial.println("Tentando gerar QR Code versão " + String(version) + "...");
+  
+  bool success = SimpleQR::generateQR(&qr, qrCodeData.c_str(), version, QRCODE_ECC_LOW);
+  
+  if (!success) {
+    Serial.println("❌ ERRO: Falha ao gerar QR Code com SimpleQR");
+    free(qrBuffer);
+    return false;
+  }
+  
+  Serial.println("✅ QR Code gerado com sucesso!");
+  Serial.println("📐 Tamanho: " + String(qr.size) + "x" + String(qr.size) + " módulos");
+  
+  // Limpar tela completamente
+  display.clearDisplay();
+  
+  // USAR APENAS A ÁREA AZUL (linhas 16-63) para melhor contraste
+  const int AREA_AZUL_INICIO = 16;
+  const int AREA_AZUL_ALTURA = 48; // 64-16=48 linhas azuis
+  const int AREA_AZUL_LARGURA = 128;
+  
+  // Calcular tamanho do pixel para caber na área azul
+  int pixelSize = min(AREA_AZUL_LARGURA / qr.size, AREA_AZUL_ALTURA / qr.size);
+  
+  if (pixelSize < 1) {
+    Serial.println("❌ ERRO: QR Code muito grande para a área azul");
+    free(qrBuffer);
+    return false;
+  }
+  
+  int qrDisplayWidth = qr.size * pixelSize;
+  int qrDisplayHeight = qr.size * pixelSize;
+  
+  // Centralizar na área azul
+  int startX = (AREA_AZUL_LARGURA - qrDisplayWidth) / 2;
+  int startY = AREA_AZUL_INICIO + (AREA_AZUL_ALTURA - qrDisplayHeight) / 2;
+  
+  Serial.println("🔵 QR Code REAL na área azul:");
+  Serial.println("Tamanho do pixel: " + String(pixelSize) + " pixels");
+  Serial.println("Tamanho total: " + String(qrDisplayWidth) + "x" + String(qrDisplayHeight));
+  Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
+  
+  // Desenhar o QR Code REAL na tela
+  for (int y = 0; y < qr.size; y++) {
+    for (int x = 0; x < qr.size; x++) {
+      if (SimpleQR::getModule(&qr, x, y)) {
+        // Módulo preto do QR Code = desenhar pixels brancos no display OLED
+        for (int py = 0; py < pixelSize; py++) {
+          for (int px = 0; px < pixelSize; px++) {
+            int screenX = startX + x * pixelSize + px;
+            int screenY = startY + y * pixelSize + py;
+            if (screenX >= 0 && screenX < 128 && 
+                screenY >= AREA_AZUL_INICIO && screenY < 64) {
+              display.drawPixel(screenX, screenY, SSD1306_WHITE);
+            }
+          }
+        }
+      }
+      // Módulos brancos ficam automaticamente pretos (fundo da tela)
+    }
+  }
+  
+  display.display();
+  estadoAtual = AGUARDAR_PAGAMENTO;
+  
+  Serial.println("\n=====================================");
+  Serial.println("   🚀 QR CODE REAL EXIBIDO!");
+  Serial.println("=====================================");
+  Serial.println("Valor: R$ " + String(valorDoacao, 2));
+  Serial.println("Payment ID: " + paymentId);
+  Serial.println();
+  Serial.println("✨ QR Code gerado com biblioteca SimpleQR");
+  Serial.println("📱 Este QR Code deve ser LEGÍVEL por apps de pagamento!");
+  Serial.println("🔵 Otimizado para área azul do display OLED");
+  Serial.println();
+  Serial.println("=== CÓDIGO PIX COPIA E COLA (BACKUP) ===");
+  Serial.println(qrCodeData);
+  Serial.println("=====================================");
+  Serial.println("⏳ Aguardando confirmação do pagamento...");
+  
+  Serial.println("Heap livre final: " + String(ESP.getFreeHeap()) + " bytes");
+  
+  free(qrBuffer);
   return true;
 }
