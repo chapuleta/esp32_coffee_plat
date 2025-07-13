@@ -2,8 +2,8 @@
 #define CONFIG_H
 
 // Configurações WiFi - ALTERE AQUI
-#define WIFI_SSID "SEU_WIFI_SSID"
-#define WIFI_PASSWORD "SUA_SENHA_WIFI"
+#define WIFI_SSID "ILZAMAGDA"
+#define WIFI_PASSWORD "inventaumaai"
 
 // Token Mercado Pago
 #define MERCADO_PAGO_TOKEN "APP_USR-5426692687926122-070811-eab51cec3eee674658dab7096fb3ba16-113476843"
