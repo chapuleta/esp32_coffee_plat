@@ -460,10 +460,6 @@ void criarPagamento(float valor) {
 }
 
 void mostrarQRCode() {
-  // Primeiro, desabilitar temporariamente o WiFi para evitar conflitos de semáforo
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  
   display.clearDisplay();
   
   // Validar se temos QR Code
@@ -478,8 +474,8 @@ void mostrarQRCode() {
   Serial.println("QR Data length: " + String(qrCodeData.length()));
   Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
   
-  // SOLUÇÃO TEMPORÁRIA: Não gerar QR Code visual para evitar conflitos
-  // Mostrar apenas informações textuais do PIX
+  // VERSÃO ESTÁVEL: Apenas interface textual (sem QR Code visual)
+  // QR Code visual será implementado em versão futura após mais testes
   
   display.setTextSize(1);
   display.setCursor(0,0);
@@ -497,9 +493,6 @@ void mostrarQRCode() {
   display.println("Codigo no Serial!");
   
   display.display();
-  
-  // Reabilitar WiFi
-  delay(100);
   
   estadoAtual = AGUARDAR_PAGAMENTO;
   
