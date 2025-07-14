@@ -161,7 +161,35 @@ void loop() {
   }
 }
 
+// Função para buscar saldo da conta Mercado Pago
+void atualizarSaldoConta() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  http.begin("https://api.mercadopago.com/v1/account/balance");
+  http.addHeader("Authorization", "Bearer " + MERCADO_PAGO_ACCESS_TOKEN);
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    String resp = http.getString();
+    int balStart = resp.indexOf("\"available_balance\":");
+    if (balStart != -1) {
+      balStart += 20;
+      int balEnd = resp.indexOf(".", balStart);
+      if (balEnd != -1) balEnd += 3; // Pega até duas casas decimais
+      else balEnd = resp.indexOf(",", balStart);
+      if (balEnd == -1) balEnd = resp.length();
+      String saldoStr = resp.substring(balStart, balEnd);
+      saldoStr.trim();
+      saldoConta = saldoStr.toFloat();
+      Serial.println("💰 Saldo Mercado Pago atualizado: R$ " + String(saldoConta, 2));
+    }
+  } else {
+    Serial.println("❌ Falha ao buscar saldo Mercado Pago: " + String(httpCode));
+  }
+  http.end();
+}
+
 void mostrarMenuInicial() {
+  atualizarSaldoConta(); // Atualiza saldo antes de mostrar
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(0,0);
@@ -657,6 +685,20 @@ void verificarPagamento() {
   if (httpResponseCode == 200) {
     String response = http.getString();
     
+    // DEBUG: Mostrar fragmentos relevantes da resposta
+    Serial.println("\n=== DEBUG: FRAGMENTOS DA RESPOSTA ===");
+    
+    // Mostrar parte do payer
+    int payerStart = response.indexOf("\"payer\"");
+    if (payerStart != -1) {
+      int payerEnd = response.indexOf("}", payerStart);
+      if (payerEnd == -1) payerEnd = payerStart + 200; // Fallback
+      String payerSection = response.substring(payerStart, min(payerEnd + 50, (int)response.length()));
+      Serial.println("Seção payer: " + payerSection);
+    } else {
+      Serial.println("❌ Seção 'payer' não encontrada");
+    }
+    
     // Usar extração de string simples em vez de JSON parsing
     int statusStart = response.indexOf("\"status\":\"");
     if (statusStart != -1) {
@@ -669,40 +711,121 @@ void verificarPagamento() {
         if (status == "approved") {
           // Pagamento aprovado
           Serial.println("🎉 PAGAMENTO APROVADO!");
-          
-          // Atualizar dados
-          ultimaContribuicao = valorDoacao;
-          ultimoContribuidor = "Anônimo";
-          saldoConta += valorDoacao;
-          
-          if (valorDoacao > maiorContribuicao) {
-            maiorContribuicao = valorDoacao;
-            maiorContribuidor = ultimoContribuidor;
+
+          // ===== EXTRAIR VALOR DO PAGAMENTO DA RESPOSTA =====
+          float valorPago = 0.0;
+          int valorStart = response.indexOf("\"transaction_amount\":");
+          if (valorStart != -1) {
+            valorStart += 21; // Pular "transaction_amount":
+            int valorEnd = response.indexOf(",", valorStart);
+            if (valorEnd == -1) valorEnd = response.indexOf("}", valorStart);
+            if (valorEnd != -1) {
+              String valorStr = response.substring(valorStart, valorEnd);
+              valorStr.trim();
+              valorPago = valorStr.toFloat();
+              Serial.println("💵 Valor pago extraído da resposta: R$ " + String(valorPago, 2));
+            }
           }
-          
-          // Mostrar confirmação na tela
+          if (valorPago <= 0.0) valorPago = valorDoacao; // Fallback
+
+          // ===== EXTRAIR DADOS DO PAGADOR =====
+          String nomeDoador = "PIX";
+          String emailDoador = "";
+          String payerId = "";
+          int payerIdStart = response.indexOf("\"payer\":");
+          if (payerIdStart != -1) {
+            int idStart = response.indexOf("\"id\":\"", payerIdStart);
+            if (idStart != -1) {
+              idStart += 7; // Pular "id":"
+              int idEnd = response.indexOf("\"", idStart);
+              if (idEnd != -1) {
+                payerId = response.substring(idStart, idEnd);
+                payerId.trim();
+                Serial.println("👤 Payer ID encontrado: " + payerId);
+              }
+            }
+          }
+          // Buscar nome completo via API de clientes Mercado Pago
+          String firstName = "";
+          String lastName = "";
+          if (payerId.length() > 0 && payerId != "null") {
+            HTTPClient httpCustomer;
+            String customerUrl = "https://api.mercadopago.com/v1/customers/" + payerId;
+            httpCustomer.begin(customerUrl);
+            httpCustomer.addHeader("Authorization", "Bearer " + MERCADO_PAGO_ACCESS_TOKEN);
+            int customerCode = httpCustomer.GET();
+            if (customerCode == 200) {
+              String customerResp = httpCustomer.getString();
+              int fnStart = customerResp.indexOf("\"first_name\":\"");
+              if (fnStart != -1) {
+                fnStart += 15;
+                int fnEnd = customerResp.indexOf("\"", fnStart);
+                if (fnEnd != -1) {
+                  firstName = customerResp.substring(fnStart, fnEnd);
+                  firstName.trim();
+                }
+              }
+              int lnStart = customerResp.indexOf("\"last_name\":\"");
+              if (lnStart != -1) {
+                lnStart += 14;
+                int lnEnd = customerResp.indexOf("\"", lnStart);
+                if (lnEnd != -1) {
+                  lastName = customerResp.substring(lnStart, lnEnd);
+                  lastName.trim();
+                }
+              }
+              if (firstName.length() > 0 || lastName.length() > 0) {
+                nomeDoador = firstName;
+                if (lastName.length() > 0) nomeDoador += " " + lastName;
+                Serial.println("👤 Nome completo do doador: " + nomeDoador);
+              }
+            } else {
+              Serial.println("❌ Falha ao buscar nome completo do doador (API customers)");
+            }
+            httpCustomer.end();
+          }
+
+          // ===== ATUALIZAR DADOS DE DOAÇÃO =====
+          ultimaContribuicao = valorPago;
+          ultimoContribuidor = nomeDoador;
+          saldoConta += valorPago;
+
+          Serial.println("💰 Atualizando saldo: R$ " + String(saldoConta, 2));
+          Serial.println("👤 Último doador: " + ultimoContribuidor);
+          Serial.println("💵 Última contribuição: R$ " + String(ultimaContribuicao, 2));
+
+          if (valorPago > maiorContribuicao) {
+            maiorContribuicao = valorPago;
+            maiorContribuidor = ultimoContribuidor;
+            Serial.println("🏆 NOVO MAIOR DOADOR: " + maiorContribuidor + " - R$ " + String(maiorContribuicao, 2));
+          }
+
+          // Mostrar confirmação na tela com dados atualizados
           display.clearDisplay();
           display.setTextSize(1);
           display.setCursor(0,0);
           display.println("PAGAMENTO APROVADO!");
           display.println();
+          display.print("Doador: ");
+          display.println(nomeDoador);
           display.print("Valor: R$ ");
-          display.println(valorDoacao, 2);
+          display.println(valorPago, 2);
           display.println();
-          display.println("Obrigado pela");
-          display.println("contribuicao!");
+          display.print("Saldo total:");
+          display.print("R$ ");
+          display.println(saldoConta, 2);
           display.println();
-          display.println("Voltando ao menu...");
+          display.println("Obrigado!");
           display.display();
-          
+
           // Aguardar antes de voltar ao menu
           delay(TEMPO_CONFIRMACAO_TELA);
-          
+
           // Resetar variáveis
           paymentId = "";
           qrCodeData = "";
           valorDoacao = 0.0;
-          
+
           // Voltar ao menu inicial
           mostrarMenuInicial();
           mostrarInstrucoesSerial();
