@@ -2,14 +2,11 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <Preferences.h>
+
 extern Preferences preferences;
 extern void receberDoacaoNome(String nome, float valor);
-
-WebServer server(80); // Global server instance
-
-
-
-void handleDoacaoNome();
+extern WebServer server;
+void handleDoacaoNome(); // Only declaration, not definition
 
 const char* login_username = "admin";
 const char* login_password = "senha123";
@@ -18,17 +15,8 @@ String saldoHtml() {
   float saldo = preferences.getFloat("saldo", 0.0);
   return String("<h2>Saldo Total: R$ ") + String(saldo, 2) + "</h2>";
 }
-void verificarRailway() {
-  // Implementação futura ou deixe vazio
-}
 
-void handleWebServer() {
-  // Implementação futura ou deixe vazio
-}
-
-void handleDoacaoNome() {
-  // Implementação futura ou deixe vazio
-}
+// Removido: verificarRailway, handleWebServer, handleDoacaoNome definitions (already in main.cpp)
 
 void handleRoot() {
   String html = "<form method='POST' action='/login'>"
@@ -72,11 +60,5 @@ void handleSetSaldo() {
   }
 }
 
-void startWebServer() {
-  // preferences.begin("doacoes", false); // Já inicializado no main.cpp
-  server.on("/", handleRoot);
-  server.on("/login", handleLogin);
-  server.on("/set_saldo", handleSetSaldo);
-  server.on("/doacao_nome", HTTP_POST, handleDoacaoNome);
-  server.begin();
-}
+
+void startWebServer(); // Only declaration, not definition
