@@ -1079,10 +1079,10 @@ bool exibirQRCodeReal() {
 // ======= NOVO FLUXO: POLLING PARA NOME/VALOR DO RAILWAY =======
 // NOVO FLUXO: Recebe nome/valor via endpoint local do ESP32
 void iniciarFluxoDoacaoNome() {
-    // Gera QR code para página web externa onde o doador informa nome/valor
-    String urlForm = "https://seu-formulario.com?destino=http://" + WiFi.localIP().toString() + ":8080/doacao_nome";
+    // Gera QR code para o formulário acessível via ngrok
+    String urlForm = "https://930c713cd0fd.ngrok-free.app/form";
     exibirQRCodeLink(urlForm);
-    Serial.println("\nAguardando envio de nome/valor via endpoint local...");
+    Serial.println("\nAguardando envio de nome/valor via /form (ngrok)...");
 }
 
 // Função para ser chamada pelo endpoint /doacao_nome
