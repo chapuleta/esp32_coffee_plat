@@ -9,9 +9,8 @@
 #include <qrcodegen.hpp>  // Nova biblioteca QR Code profissional (Nayuki)
 #include "config.h"
 #include <Preferences.h>
-#include "web_server.cpp"
 
-Preferences preferences;
+extern Preferences preferences;
 
 // Declarações das funções
 void mostrarMenuInicial();
@@ -22,6 +21,7 @@ void criarPagamento(float valor);
 void mostrarQRCode();
 void verificarPagamento();
 bool exibirQRCodeReal(); // Função para QR Code REAL usando QRCodeGen (Nayuki)
+void handleWebServer(); // Adicione a declaração da função para o linker
 
 // Configurações da tela OLED
 #define SCREEN_WIDTH 128
@@ -115,6 +115,9 @@ void setup() {
   
   mostrarMenuInicial();
   mostrarInstrucoesSerial();
+  // Iniciar servidor web
+  extern void startWebServer();
+  startWebServer();
 }
 
 void loop() {
@@ -164,8 +167,6 @@ void loop() {
   }
   
   handleWebServer(); // Mantém o servidor web ativo
-  // ======= POLLING RAILWAY =======
-  verificarRailway();
 }
 
 // Função para buscar saldo da conta Mercado Pago
@@ -201,7 +202,8 @@ void atualizarSaldoContaFlash(float novoSaldo) {
 }
 
 void mostrarMenuInicial() {
-  atualizarSaldoConta(); // Atualiza saldo antes de mostrar
+  saldoConta = preferences.getFloat("saldo", 0.0); // Atualiza saldo da flash
+  atualizarSaldoConta(); // Atualiza saldo Mercado Pago
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(0,0);
@@ -392,7 +394,7 @@ void processarComando(char comando) {
       doacaoAnonima = false;
       aguardandoTipoDoacao = false;
       // Inicia fluxo Railway para nome/valor
-      iniciarFluxoRailway();
+      // iniciarFluxoRailway();
     }
     return;
   }
@@ -761,7 +763,7 @@ void verificarPagamento() {
           if (valorPago > maiorContribuicao) {
             maiorContribuicao = valorPago;
             maiorContribuidor = ultimoContribuidor;
-            Serial.println("🏆 NOVO MAIOR DOADOR: " + maiorContribuidor + " - R$ " + String(maiorContribuicao, 2));
+            Serial.println(String("🏆 NOVO MAIOR DOADOR: ") + String(maiorContribuicao) + " - R$ " + String(maiorContribuicao, 2));
           }
 
           // Mostrar confirmação na tela com dados atualizados
