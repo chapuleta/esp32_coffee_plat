@@ -166,6 +166,17 @@ void loop() {
   }
   
   handleWebServer(); // Mantém o servidor web ativo
+
+  // ======= AUTO-REFRESH DO DISPLAY OLED QUANDO O SALDO MUDA NA FLASH =======
+  static float saldoContaAnterior = -9999.99;
+  float saldoAtualFlash = preferences.getFloat("saldo", 0.0);
+  if (fabs(saldoAtualFlash - saldoContaAnterior) > 0.001) {
+    saldoContaAnterior = saldoAtualFlash;
+    saldoConta = saldoAtualFlash;
+    mostrarMenuInicial();
+    // Opcional: mostrar instruções no serial
+    mostrarInstrucoesSerial();
+  }
 }
 
 // Função para buscar saldo da conta Mercado Pago
