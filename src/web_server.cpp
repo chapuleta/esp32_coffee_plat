@@ -1,9 +1,15 @@
-#include <WiFi.h>
+// Required includes and global declarations
+#include <Arduino.h>
 #include <WebServer.h>
 #include <Preferences.h>
-
 extern Preferences preferences;
-WebServer server(80);
+extern void receberDoacaoNome(String nome, float valor);
+
+WebServer server(80); // Global server instance
+
+
+
+void handleDoacaoNome();
 
 const char* login_username = "admin";
 const char* login_password = "senha123";
@@ -11,6 +17,17 @@ const char* login_password = "senha123";
 String saldoHtml() {
   float saldo = preferences.getFloat("saldo", 0.0);
   return String("<h2>Saldo Total: R$ ") + String(saldo, 2) + "</h2>";
+}
+void verificarRailway() {
+  // Implementação futura ou deixe vazio
+}
+
+void handleWebServer() {
+  // Implementação futura ou deixe vazio
+}
+
+void handleDoacaoNome() {
+  // Implementação futura ou deixe vazio
 }
 
 void handleRoot() {
@@ -60,9 +77,6 @@ void startWebServer() {
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
   server.on("/set_saldo", handleSetSaldo);
+  server.on("/doacao_nome", HTTP_POST, handleDoacaoNome);
   server.begin();
-}
-
-void handleWebServer() {
-  server.handleClient();
 }
