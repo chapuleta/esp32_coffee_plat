@@ -6,11 +6,12 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-// #include <qrcode.h> // REMOVIDO: causava Guru Meditation Error
-// #include <SimpleQR.h>  // REMOVIDO: substituído por QRCodeGen
 #include <qrcodegen.hpp>  // Nova biblioteca QR Code profissional (Nayuki)
-#include <mbedtls/base64.h>
 #include "config.h"
+#include <Preferences.h>
+#include "web_server.cpp"
+
+Preferences preferences;
 
 // Declarações das funções
 void mostrarMenuInicial();
@@ -20,11 +21,7 @@ void processarComando(char comando);
 void criarPagamento(float valor);
 void mostrarQRCode();
 void verificarPagamento();
-void tentarExibirQRCodePNG(); // Nova função para testar PNG do base64
-bool exibirQRCodePNGnaTela(); // Função para exibir PNG na tela OLED
 bool exibirQRCodeReal(); // Função para QR Code REAL usando QRCodeGen (Nayuki)
-bool extrairDadosPNG(unsigned char* pngData, size_t pngSize, uint32_t* width, uint32_t* height, unsigned char** imageData); // Extração de dados PNG
-void converterParaBitmap(unsigned char* imageData, uint32_t width, uint32_t height, int displayX, int displayY, int maxWidth, int maxHeight); // Conversão para bitmap
 
 // Configurações da tela OLED
 #define SCREEN_WIDTH 128
@@ -64,7 +61,6 @@ float saldoConta = 0.0;
 // Variáveis do pagamento
 String paymentId = "";
 String qrCodeData = "";
-String qrCodeBase64 = ""; // Para armazenar o PNG base64
 float valorDoacao = 0.0;
 
 // Variáveis para valor personalizado
@@ -75,13 +71,20 @@ String valorPersonalizadoStr = "";
 String sequenciaEscape = "";
 bool lendoSequenciaEscape = false;
 
-// Variáveis para webhook
-bool webhookRecebido = false;
-String webhookPaymentId = "";
-String webhookStatus = "";
+// Novas variáveis para fluxo de doação
+bool aguardandoTipoDoacao = false;
+bool doacaoAnonima = true;
+String nomeDoUsuario = "";
+
+// ======= NOVO FLUXO: POLLING PARA NOME/VALOR DO RAILWAY =======
+String railwayNome = "";
+float railwayValor = 0.0;
+bool aguardandoRailway = false;
 
 void setup() {
   Serial.begin(115200);
+  preferences.begin("doacoes", false);
+  saldoConta = preferences.getFloat("saldo", 0.0);
   
   // Inicializar display OLED
   if(!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
@@ -159,6 +162,10 @@ void loop() {
     verificarPagamento();
     delay(VERIFICACAO_PAGAMENTO_INTERVALO);
   }
+  
+  handleWebServer(); // Mantém o servidor web ativo
+  // ======= POLLING RAILWAY =======
+  verificarRailway();
 }
 
 // Função para buscar saldo da conta Mercado Pago
@@ -186,6 +193,11 @@ void atualizarSaldoConta() {
     Serial.println("❌ Falha ao buscar saldo Mercado Pago: " + String(httpCode));
   }
   http.end();
+}
+
+void atualizarSaldoContaFlash(float novoSaldo) {
+  saldoConta = novoSaldo;
+  preferences.putFloat("saldo", saldoConta);
 }
 
 void mostrarMenuInicial() {
@@ -285,13 +297,6 @@ void mostrarInstrucoesSerial() {
   
   if (estadoAtual == MENU_INICIAL) {
     Serial.println("1 - Fazer doação");
-    Serial.println("9 - TESTE: API QR Code Base64 (R$ 0,01)");
-    if (qrCodeBase64.length() > 0) {
-      Serial.println("T - TESTE: Exibir QR PNG real atual");
-      Serial.println("S - TESTE: Exibir QR Code REAL (tela completa)");
-      Serial.println("R - TESTE: QR Code REAL (biblioteca QRCodeGen)");
-      Serial.println("8 - TESTE: Decodificar PNG atual");
-    }
     Serial.println("0 - Voltar ao menu inicial");
   } else if (estadoAtual == SELECIONAR_VALOR) {
     if (inserindoValorPersonalizado) {
@@ -306,6 +311,21 @@ void mostrarInstrucoesSerial() {
   }
   
   Serial.println("============================");
+}
+
+void mostrarPerguntaTipoDoacao() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.println("Como deseja doar?");
+  display.println();
+  display.println("1 - Anônimo");
+  display.println("2 - Com nome");
+  display.display();
+  Serial.println("\nComo deseja doar?");
+  Serial.println("1 - Anônimo");
+  Serial.println("2 - Com nome");
+  aguardandoTipoDoacao = true;
 }
 
 void processarComando(char comando) {
@@ -362,48 +382,24 @@ void processarComando(char comando) {
     return;
   }
   
+  if (aguardandoTipoDoacao) {
+    if (comando == '1') {
+      doacaoAnonima = true;
+      aguardandoTipoDoacao = false;
+      mostrarMenuSelecaoValor();
+      mostrarInstrucoesSerial();
+    } else if (comando == '2') {
+      doacaoAnonima = false;
+      aguardandoTipoDoacao = false;
+      // Inicia fluxo Railway para nome/valor
+      iniciarFluxoRailway();
+    }
+    return;
+  }
+  
   if (comando == '1' && estadoAtual == MENU_INICIAL) {
-    opcaoSelecionada = 0;
-    mostrarMenuSelecaoValor();
-    mostrarInstrucoesSerial();
-  }
-  else if (comando == '9' && estadoAtual == MENU_INICIAL) {
-    Serial.println("\n=== TESTE: Criando pagamento de R$ 0,01 para testar API ===");
-    criarPagamento(0.01);
-  }
-  else if (comando == '8' && estadoAtual == MENU_INICIAL && qrCodeBase64.length() > 0) {
-    Serial.println("\n=== TESTE: Decodificando PNG do QR Code atual ===");
-    tentarExibirQRCodePNG();
-  }
-  else if ((comando == 't' || comando == 'T') && estadoAtual == MENU_INICIAL && qrCodeBase64.length() > 0) {
-    Serial.println("\n🎯 === TESTE: QR CODE PNG SIMULADO ===");
-    Serial.println("Forçando exibição do QR Code PNG simulado na tela...");
-    
-    if (exibirQRCodePNGnaTela()) {
-      Serial.println("✅ QR Code PNG simulado exibido! (pode não ser legível)");
-    } else {
-      Serial.println("❌ Falha ao exibir QR Code PNG simulado.");
-    }
-  }
-  else if ((comando == 's' || comando == 'S') && estadoAtual == MENU_INICIAL && qrCodeData.length() > 0) {
-    Serial.println("\n🎯 === TESTE: QR CODE REAL (TELA COMPLETA) ===");
-    Serial.println("Exibindo QR Code usando toda a tela 128x64...");
-    
-    if (exibirQRCodeReal()) {
-      Serial.println("✅ QR Code REAL exibido! Teste com um app de pagamento.");
-    } else {
-      Serial.println("❌ Falha ao exibir QR Code real.");
-    }
-  }
-  else if ((comando == 'r' || comando == 'R') && estadoAtual == MENU_INICIAL && qrCodeData.length() > 0) {
-    Serial.println("\n🚀 === TESTE: QR CODE REAL (BIBLIOTECA QRCODEGEN) ===");
-    Serial.println("Tentando gerar QR Code REAL com biblioteca profissional (Nayuki)...");
-    
-    if (exibirQRCodeReal()) {
-      Serial.println("✅ QR Code REAL gerado! Teste se é legível por apps de pagamento.");
-    } else {
-      Serial.println("❌ Falha ao gerar QR Code real.");
-    }
+    mostrarPerguntaTipoDoacao();
+    return;
   }
   else if (comando == '0') {
     mostrarMenuInicial();
@@ -432,6 +428,58 @@ void processarComando(char comando) {
   }
 }
 
+void criarPagamentoRailwayFlow() {
+  // Gera um QR code que aponta para a página Railway para entrada de nome/valor
+  String sessionId = String(millis()) + String(random(1000,9999));
+  String railwayUrl = "https://your-railway-app.com/donate?session=" + sessionId;
+
+  // Exibe QR code do Railway na tela OLED
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.println("Acesse para doar:");
+  display.println();
+  display.println("Escaneie QR");
+  display.display();
+
+  // Gera e exibe QR code do Railway
+  try {
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(railwayUrl.c_str(), qrcodegen::QrCode::Ecc::MEDIUM_ECC);
+    int pixelSize = std::min(128 / qr.getSize(), 64 / qr.getSize());
+    int startX = (128 - qr.getSize() * pixelSize) / 2;
+    int startY = (64 - qr.getSize() * pixelSize) / 2;
+    for (int y = 0; y < qr.getSize(); y++) {
+      for (int x = 0; x < qr.getSize(); x++) {
+        if (qr.getModule(x, y)) {
+          for (int py = 0; py < pixelSize; py++) {
+            for (int px = 0; px < pixelSize; px++) {
+              int screenX = startX + x * pixelSize + px;
+              int screenY = startY + y * pixelSize + py;
+              if (screenX >= 0 && screenX < 128 && screenY >= 0 && screenY < 64) {
+                display.drawPixel(screenX, screenY, SSD1306_BLACK);
+              }
+            }
+          }
+        }
+      }
+    }
+    display.display();
+    Serial.println("QR code Railway exibido: " + railwayUrl);
+  } catch (const std::exception& e) {
+    Serial.println("Erro ao gerar QR code Railway: " + String(e.what()));
+  }
+  // TODO: Implementar polling para Railway API para receber nome/valor e gerar QR de pagamento
+}
+
+void mostrarPerguntaNomeUsuario() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.println("Digite seu nome no Serial");
+  display.display();
+  Serial.println("\nDigite seu nome e pressione ENTER:");
+}
+
 void criarPagamento(float valor) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi desconectado!");
@@ -458,51 +506,23 @@ void criarPagamento(float valor) {
   doc["payment_method_id"] = "pix";
   
   JsonObject payer = doc.createNestedObject("payer");
-  payer["email"] = "doador@exemplo.com";
+  if (doacaoAnonima) {
+    payer["email"] = "anonimo@exemplo.com";
+    payer["first_name"] = "Anônimo";
+  } else {
+    payer["email"] = "doador@exemplo.com";
+    payer["first_name"] = nomeDoUsuario;
+  }
   
   String jsonString;
   serializeJson(doc, jsonString);
   
   Serial.println("Enviando requisição para Mercado Pago...");
-  Serial.println("Idempotency Key: " + idempotencyKey);
   int httpResponseCode = http.POST(jsonString);
   
   if (httpResponseCode == 201) {
     String response = http.getString();
     Serial.println("Pagamento criado com sucesso!");
-    Serial.println("Tamanho da resposta: " + String(response.length()) + " bytes");
-    
-    // Debug: Vamos verificar que campos de QR Code estão disponíveis
-    Serial.println("\n=== DEBUG: CAMPOS QR CODE DISPONÍVEIS ===");
-    if (response.indexOf("\"qr_code\":") != -1) {
-      Serial.println("✓ Campo 'qr_code' encontrado");
-    } else {
-      Serial.println("✗ Campo 'qr_code' NÃO encontrado");
-    }
-    
-    if (response.indexOf("\"qr_code_base64\":") != -1) {
-      Serial.println("✓ Campo 'qr_code_base64' encontrado");
-    } else {
-      Serial.println("✗ Campo 'qr_code_base64' NÃO encontrado");
-    }
-    
-    // Investigar outros formatos possíveis
-    if (response.indexOf("\"qr_code_png\":") != -1) {
-      Serial.println("✓ Campo 'qr_code_png' encontrado");
-    } else {
-      Serial.println("✗ Campo 'qr_code_png' NÃO encontrado");
-    }
-    
-    if (response.indexOf("\"qr_code_url\":") != -1) {
-      Serial.println("✓ Campo 'qr_code_url' encontrado");
-    } else {
-      Serial.println("✗ Campo 'qr_code_url' NÃO encontrado");
-    }
-    
-    // Debug: Mostrar uma amostra da resposta para investigar
-    Serial.println("\n=== AMOSTRA DA RESPOSTA (primeiros 500 chars) ===");
-    Serial.println(response.substring(0, min(500, (int)response.length())));
-    Serial.println("==========================================");
     
     // Extrair Payment ID usando busca de string (mais eficiente)
     int idStart = response.indexOf("\"id\":");
@@ -526,60 +546,20 @@ void criarPagamento(float valor) {
       if (qrEnd != -1) {
         qrCodeData = response.substring(qrStart, qrEnd);
         Serial.println("✓ QR Code extraído com sucesso!");
-        Serial.println("QR Code length: " + String(qrCodeData.length()));
-        Serial.println("QR Code: " + qrCodeData.substring(0, min(50, (int)qrCodeData.length())) + "...");
-      } else {
-        Serial.println("✗ Erro ao extrair QR Code - fim não encontrado");
-      }
-    }
-    
-    // SEMPRE tentar extrair QR Code Base64 também (para exibição visual)
-    int qrBase64Start = response.indexOf("\"qr_code_base64\":\"");
-    if (qrBase64Start != -1) {
-      qrBase64Start += 18; // Pular "qr_code_base64":"
-      int qrBase64End = response.indexOf("\"", qrBase64Start);
-      if (qrBase64End != -1) {
-        qrCodeBase64 = response.substring(qrBase64Start, qrBase64End);
-        Serial.println("✓ QR Code Base64 encontrado!");
-        Serial.println("Length: " + String(qrCodeBase64.length()) + " chars");
         
-        // Verificar se é realmente uma imagem PNG
-        if (qrCodeBase64.startsWith("iVBORw0KGgo")) {
-          Serial.println("✓ Base64 confirmado como PNG válido!");
-          Serial.println("🚀 Tentando QR Code REAL com biblioteca QRCodeGen!");
-          
-          // PRIORIDADE 1: Tentar QR Code REAL
-          if (exibirQRCodeReal()) {
-            Serial.println("✅ QR Code REAL exibido com sucesso!");
-          } else {
-            Serial.println("❌ QR Code REAL falhou - tentando PNG...");
-            if (exibirQRCodePNGnaTela()) {
-              Serial.println("✅ QR Code PNG exibido como fallback!");
-            } else {
-              Serial.println("❌ Falha PNG - tentando novamente...");
-              if (exibirQRCodeReal()) {
-                Serial.println("✅ QR Code REAL exibido na segunda tentativa!");
-              } else {
-                Serial.println("❌ Falha total - usando interface textual");
-                mostrarQRCode();
-              }
-            }
-          }
+        if (exibirQRCodeReal()) {
+          Serial.println("✅ QR Code REAL exibido com sucesso!");
         } else {
-          Serial.println("⚠️ Base64 não parece ser PNG (header diferente)");
-          // Tentar QR Code REAL mesmo assim
-          if (exibirQRCodeReal()) {
-            Serial.println("✅ QR Code REAL exibido com sucesso!");
-          } else if (exibirQRCodePNGnaTela()) {
-            Serial.println("✅ QR Code PNG exibido como fallback!");
-          } else {
-            mostrarQRCode();
-          }
+          Serial.println("❌ Falha ao exibir QR Code. Usando interface textual.");
+          mostrarQRCode();
         }
+      } else {
+         Serial.println("✗ Erro ao extrair QR Code - fim não encontrado");
+         mostrarQRCode();
       }
-    } else if (qrCodeData.length() > 0) {
-      // Se não tem PNG, usar interface textual normal
-      mostrarQRCode();
+    } else {
+        Serial.println("✗ Erro ao extrair QR Code da resposta da API.");
+        mostrarQRCode(); // Fallback para interface de texto
     }
   } else {
     Serial.print("Erro na requisição: ");
@@ -611,9 +591,6 @@ void mostrarQRCode() {
   Serial.println("Preparando exibição do PIX...");
   Serial.println("QR Data length: " + String(qrCodeData.length()));
   Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
-  
-  // VERSÃO ESTÁVEL: Apenas interface textual (sem QR Code visual)
-  // QR Code visual será implementado em versão futura após mais testes
   
   display.setTextSize(1);
   display.setCursor(0,0);
@@ -684,20 +661,6 @@ void verificarPagamento() {
   
   if (httpResponseCode == 200) {
     String response = http.getString();
-    
-    // DEBUG: Mostrar fragmentos relevantes da resposta
-    Serial.println("\n=== DEBUG: FRAGMENTOS DA RESPOSTA ===");
-    
-    // Mostrar parte do payer
-    int payerStart = response.indexOf("\"payer\"");
-    if (payerStart != -1) {
-      int payerEnd = response.indexOf("}", payerStart);
-      if (payerEnd == -1) payerEnd = payerStart + 200; // Fallback
-      String payerSection = response.substring(payerStart, min(payerEnd + 50, (int)response.length()));
-      Serial.println("Seção payer: " + payerSection);
-    } else {
-      Serial.println("❌ Seção 'payer' não encontrada");
-    }
     
     // Usar extração de string simples em vez de JSON parsing
     int statusStart = response.indexOf("\"status\":\"");
@@ -789,6 +752,7 @@ void verificarPagamento() {
           ultimaContribuicao = valorPago;
           ultimoContribuidor = nomeDoador;
           saldoConta += valorPago;
+          atualizarSaldoContaFlash(saldoConta); // Salva saldo na flash
 
           Serial.println("💰 Atualizando saldo: R$ " + String(saldoConta, 2));
           Serial.println("👤 Último doador: " + ultimoContribuidor);
@@ -817,6 +781,9 @@ void verificarPagamento() {
           display.println();
           display.println("Obrigado!");
           display.display();
+
+          // Salvar saldo atualizado na flash
+          atualizarSaldoContaFlash(saldoConta);
 
           // Aguardar antes de voltar ao menu
           delay(TEMPO_CONFIRMACAO_TELA);
@@ -869,371 +836,6 @@ void verificarPagamento() {
   http.end();
 }
 
-void tentarExibirQRCodePNG() {
-  if (qrCodeBase64.length() == 0) {
-    Serial.println("❌ Nenhum QR Code Base64 disponível para teste");
-    return;
-  }
-  
-  Serial.println("\n=== TESTE: DECODIFICAÇÃO BASE64 PARA PNG ===");
-  Serial.println("Base64 length: " + String(qrCodeBase64.length()));
-  Serial.println("Heap livre antes: " + String(ESP.getFreeHeap()) + " bytes");
-  
-  // Calcular tamanho necessário para decodificação (aproximadamente 3/4 do base64)
-  int decodedLen = (qrCodeBase64.length() * 3) / 4;
-  Serial.println("Tamanho esperado após decodificação: " + String(decodedLen) + " bytes");
-  
-  if (decodedLen > ESP.getFreeHeap() / 2) {
-    Serial.println("❌ ERRO: Não há memória suficiente para decodificar");
-    Serial.println("   Necessário: " + String(decodedLen) + " bytes");
-    Serial.println("   Disponível: " + String(ESP.getFreeHeap()) + " bytes");
-    return;
-  }
-  
-  // Tentar decodificar usando mbedtls base64 (nativo do ESP32)
-  size_t decodedLength = 0;
-  
-  // Primeiro, calcular o tamanho necessário
-  int ret = mbedtls_base64_decode(NULL, 0, &decodedLength, 
-                                  (const unsigned char*)qrCodeBase64.c_str(), 
-                                  qrCodeBase64.length());
-  
-  if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-    Serial.println("❌ ERRO: Base64 inválido ou erro ao calcular tamanho");
-    return;
-  }
-  
-  Serial.println("Tamanho calculado: " + String(decodedLength) + " bytes");
-  
-  if (decodedLength > ESP.getFreeHeap() / 2) {
-    Serial.println("❌ ERRO: Não há memória suficiente para decodificar");
-    Serial.println("   Necessário: " + String(decodedLength) + " bytes");
-    Serial.println("   Disponível: " + String(ESP.getFreeHeap()) + " bytes");
-    return;
-  }
-  
-  unsigned char* decodedData = (unsigned char*)malloc(decodedLength);
-  if (decodedData == NULL) {
-    Serial.println("❌ ERRO: Falha ao alocar memória para decodificação");
-    return;
-  }
-  
-  size_t actualLen = 0;
-  ret = mbedtls_base64_decode(decodedData, decodedLength, &actualLen,
-                              (const unsigned char*)qrCodeBase64.c_str(), 
-                              qrCodeBase64.length());
-  
-  if (ret != 0) {
-    Serial.println("❌ ERRO: Falha na decodificação base64. Código: " + String(ret));
-    free(decodedData);
-    return;
-  }
-  
-  Serial.println("✓ Decodificação bem-sucedida! Bytes decodificados: " + String(actualLen));
-  Serial.println("Heap livre após decodificação: " + String(ESP.getFreeHeap()) + " bytes");
-  
-  // Verificar header PNG
-  if (actualLen >= 8) {
-    const uint8_t* pngData = (const uint8_t*)decodedData;
-    if (pngData[0] == 0x89 && pngData[1] == 0x50 && pngData[2] == 0x4E && pngData[3] == 0x47) {
-      Serial.println("✓ Header PNG válido confirmado!");
-      
-      // Tentar extrair dimensões do PNG
-      if (actualLen >= 24) {
-        uint32_t width = (pngData[16] << 24) | (pngData[17] << 16) | (pngData[18] << 8) | pngData[19];
-        uint32_t height = (pngData[20] << 24) | (pngData[21] << 16) | (pngData[22] << 8) | pngData[23];
-        Serial.println("📐 Dimensões do QR Code PNG: " + String(width) + "x" + String(height) + " pixels");
-        
-        if (width <= 128 && height <= 64) {
-          Serial.println("✓ Dimensões compatíveis com display OLED 128x64!");
-        } else {
-          Serial.println("⚠️ Dimensões grandes - precisará de redimensionamento");
-        }
-      }
-      
-      // TODO: Implementar conversão PNG para bitmap monocromático
-      Serial.println("📋 PRÓXIMOS PASSOS:");
-      Serial.println("   1. Decodificar PNG para RGB");
-      Serial.println("   2. Converter RGB para monocromático (1-bit)");
-      Serial.println("   3. Redimensionar se necessário");
-      Serial.println("   4. Exibir no display OLED");
-      Serial.println("💡 Por limitações de memória, recomenda-se conversão offline");
-      
-    } else {
-      Serial.println("❌ ERRO: Dados decodificados não são PNG válido");
-      Serial.print("   Header encontrado: ");
-      for (int i = 0; i < min(8, (int)actualLen); i++) {
-        Serial.print("0x");
-        Serial.print(pngData[i], HEX);
-        Serial.print(" ");
-      }
-      Serial.println();
-    }
-  } else {
-    Serial.println("❌ ERRO: Dados decodificados muito pequenos");
-  }
-  
-  free(decodedData);
-  
-  Serial.println("Heap livre final: " + String(ESP.getFreeHeap()) + " bytes");
-  Serial.println("=====================================\n");
-}
-
-// Função auxiliar para extrair dados de imagem de um PNG simples
-bool extrairDadosPNG(unsigned char* pngData, size_t pngSize, uint32_t* width, uint32_t* height, unsigned char** imageData) {
-  // Verificar header PNG
-  if (pngSize < 24 || pngData[0] != 0x89 || pngData[1] != 0x50 || 
-      pngData[2] != 0x4E || pngData[3] != 0x47) {
-    return false;
-  }
-  
-  // Extrair dimensões
-  *width = (pngData[16] << 24) | (pngData[17] << 16) | (pngData[18] << 8) | pngData[19];
-  *height = (pngData[20] << 24) | (pngData[21] << 16) | (pngData[22] << 8) | pngData[23];
-  
-  // Para QR Codes gerados pelo Mercado Pago, assumimos que são PNG de 1 bit (monocromático)
-  // ou grayscale simples. Vamos procurar pelos dados IDAT
-  size_t pos = 33; // Pular header PNG (8) + IHDR chunk (25)
-  
-  while (pos < pngSize - 8) {
-    uint32_t chunkSize = (pngData[pos] << 24) | (pngData[pos+1] << 16) | 
-                        (pngData[pos+2] << 8) | pngData[pos+3];
-    
-    // Verificar se é chunk IDAT (dados da imagem)
-    if (pngData[pos+4] == 'I' && pngData[pos+5] == 'D' && 
-        pngData[pos+6] == 'A' && pngData[pos+7] == 'T') {
-      
-      // Para simplificar, vamos assumir que os dados estão sem compressão
-      // ou usar uma heurística simples para extrair o padrão do QR Code
-      *imageData = &pngData[pos+8];
-      return true;
-    }
-    
-    pos += 8 + chunkSize + 4; // Pular chunk header + dados + CRC
-  }
-  
-  return false;
-}
-
-// Função para converter dados da imagem para bitmap monocromático
-void converterParaBitmap(unsigned char* imageData, uint32_t width, uint32_t height, 
-                        int displayX, int displayY, int maxWidth, int maxHeight) {
-  
-  // Calcular fator de escala
-  int scale = max(1, max((int)width / maxWidth, (int)height / maxHeight));
-  int scaledWidth = min(maxWidth, (int)width / scale);
-  int scaledHeight = min(maxHeight, (int)height / scale);
-  
-  Serial.println("🎯 QR Code CONTRASTE MÁXIMO - SEM ARTEFATOS");
-  Serial.println("Escala: 1:" + String(scale));
-  Serial.println("Tamanho final: " + String(scaledWidth) + "x" + String(scaledHeight));
-  
-  // IMPLEMENTAÇÃO LIMPA - CONTRASTE PERFEITO
-  for (int y = 0; y < scaledHeight; y++) {
-    for (int x = 0; x < scaledWidth; x++) {
-      // Mapear para coordenadas originais
-      int origX = x * scale + (scale / 2);
-      int origY = y * scale + (scale / 2);
-      
-      bool isBlackModule = false; // Módulo preto do QR Code
-      
-      if (origX >= 0 && origX < width && origY >= 0 && origY < height) {
-        // Posição normalizada (0.0 a 1.0)
-        float normX = (float)origX / (float)width;
-        float normY = (float)origY / (float)height;
-        
-        // 1. QUIET ZONE (zona silenciosa) - sempre branca
-        float quietZone = 0.10; // 10% de borda
-        bool inQuietZone = (normX < quietZone || normX > 1.0-quietZone || 
-                           normY < quietZone || normY > 1.0-quietZone);
-        
-        if (!inQuietZone) {
-          // 2. FINDER PATTERNS (padrões de detecção nos cantos)
-          float finderSize = 0.20; // 20% para cada finder
-          
-          // Verificar se está em algum finder pattern
-          bool inTopLeft = (normX >= quietZone && normX <= quietZone + finderSize && 
-                           normY >= quietZone && normY <= quietZone + finderSize);
-          bool inTopRight = (normX >= 1.0-quietZone-finderSize && normX <= 1.0-quietZone && 
-                            normY >= quietZone && normY <= quietZone + finderSize);
-          bool inBottomLeft = (normX >= quietZone && normX <= quietZone + finderSize && 
-                              normY >= 1.0-quietZone-finderSize && normY <= 1.0-quietZone);
-          
-          if (inTopLeft || inTopRight || inBottomLeft) {
-            // Calcular centro do finder pattern
-            float centerX, centerY;
-            if (inTopLeft) {
-              centerX = quietZone + finderSize/2;
-              centerY = quietZone + finderSize/2;
-            } else if (inTopRight) {
-              centerX = 1.0 - quietZone - finderSize/2;
-              centerY = quietZone + finderSize/2;
-            } else { // bottomLeft
-              centerX = quietZone + finderSize/2;
-              centerY = 1.0 - quietZone - finderSize/2;
-            }
-            
-            // Distância do centro (normalizada)
-            float dx = abs(normX - centerX) / (finderSize/2);
-            float dy = abs(normY - centerY) / (finderSize/2);
-            float maxDist = max(dx, dy);
-            
-            // Padrão concêntrico 7x7: preto-branco-preto-branco-preto
-            if (maxDist <= 0.15) {
-              isBlackModule = true;  // Centro 1x1 (preto)
-            } else if (maxDist <= 0.45) {
-              isBlackModule = false; // Anel 3x3 (branco)
-            } else if (maxDist <= 0.75) {
-              isBlackModule = true;  // Anel 5x5 (preto)
-            } else if (maxDist <= 0.90) {
-              isBlackModule = false; // Anel 7x7 (branco)
-            } else {
-              isBlackModule = true;  // Borda externa (preto)
-            }
-          }
-          // 3. TIMING PATTERNS (linhas de sincronização)
-          else {
-            bool isTimingRow = (abs(normY - 0.48) < 0.04); // Linha horizontal
-            bool isTimingCol = (abs(normX - 0.48) < 0.04); // Linha vertical
-            
-            if (isTimingRow || isTimingCol) {
-              // Alternância: módulo par = preto, ímpar = branco
-              int moduleIndex = (int)((isTimingRow ? normX : normY) * 21); // Assumindo QR 21x21
-              isBlackModule = (moduleIndex % 2 == 0);
-            }
-            // 4. DATA AREA (área de dados)
-            else {
-              // Padrão pseudo-aleatório baseado em posição
-              int moduleX = (int)(normX * 21);
-              int moduleY = (int)(normY * 21);
-              
-              // Hash determinístico para gerar padrão consistente
-              uint32_t hash = (moduleX * 31 + moduleY * 17 + moduleX * moduleY * 7) % 1009;
-              
-              // Aproximadamente 45% dos módulos são pretos (típico para QR Code)
-              isBlackModule = (hash % 9 < 4) || 
-                             ((moduleX + moduleY) % 7 < 3) ||
-                             ((moduleX * 3 + moduleY * 2) % 11 < 5);
-            }
-          }
-        }
-        // Quiet zone permanece false (branco)
-      }
-      
-      // DESENHAR PIXEL COM CONTRASTE MÁXIMO
-      if (isBlackModule) {
-        // Módulo preto do QR = pixel branco no display OLED
-        display.drawPixel(displayX + x, displayY + y, SSD1306_WHITE);
-      }
-      // Módulo branco do QR = pixel preto no display (fundo)
-    }
-  }
-}
-
-bool exibirQRCodePNGnaTela() {
-  if (qrCodeBase64.length() == 0) {
-    Serial.println("❌ Nenhum QR Code Base64 disponível");
-    return false;
-  }
-  
-  Serial.println("\n🖼️ === EXIBINDO QR CODE PNG REAL NA TELA OLED ===");
-  Serial.println("Base64 length: " + String(qrCodeBase64.length()));
-  Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
-  
-  // Decodificar base64
-  size_t decodedLength = 0;
-  int ret = mbedtls_base64_decode(NULL, 0, &decodedLength, 
-                                  (const unsigned char*)qrCodeBase64.c_str(), 
-                                  qrCodeBase64.length());
-  
-  if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
-    Serial.println("❌ ERRO: Base64 inválido");
-    return false;
-  }
-  
-  if (decodedLength > ESP.getFreeHeap() / 3) {
-    Serial.println("❌ ERRO: PNG muito grande para a memória disponível");
-    Serial.println("   Necessário: " + String(decodedLength) + " bytes");
-    Serial.println("   Disponível: " + String(ESP.getFreeHeap()) + " bytes");
-    return false;
-  }
-  
-  unsigned char* pngData = (unsigned char*)malloc(decodedLength);
-  if (pngData == NULL) {
-    Serial.println("❌ ERRO: Falha ao alocar memória");
-    return false;
-  }
-  
-  size_t actualLen = 0;
-  ret = mbedtls_base64_decode(pngData, decodedLength, &actualLen,
-                              (const unsigned char*)qrCodeBase64.c_str(), 
-                              qrCodeBase64.length());
-  
-  if (ret != 0) {
-    Serial.println("❌ ERRO: Falha na decodificação");
-    free(pngData);
-    return false;
-  }
-  
-  // Verificar header PNG e extrair dimensões
-  uint32_t width, height;
-  unsigned char* imageData;
-  
-  if (!extrairDadosPNG(pngData, actualLen, &width, &height, &imageData)) {
-    Serial.println("❌ ERRO: Não é PNG válido ou falha na extração");
-    free(pngData);
-    return false;
-  }
-  
-  Serial.println("📐 PNG: " + String(width) + "x" + String(height) + " pixels");
-  
-  // Limpar tela completamente para mostrar APENAS o QR Code
-  display.clearDisplay();
-  
-  // USAR TODA A TELA 128x64 para maximizar o QR Code
-  int maxQRWidth = 128;   // Usar toda a largura da tela
-  int maxQRHeight = 64;   // Usar toda a altura da tela
-  
-  int scale = max(1, max((int)width / maxQRWidth, (int)height / maxQRHeight));
-  int scaledWidth = min(maxQRWidth, (int)width / scale);
-  int scaledHeight = min(maxQRHeight, (int)height / scale);
-  
-  int startX = (128 - scaledWidth) / 2;  // Centralizar horizontalmente
-  int startY = (64 - scaledHeight) / 2;  // Centralizar verticalmente
-  
-  Serial.println("📱 QR Code na tela completa - máximo tamanho");
-  Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
-  Serial.println("Tamanho: " + String(scaledWidth) + "x" + String(scaledHeight));
-  Serial.println("�️ Usando toda a tela 128x64 para máxima qualidade");
-  
-  // Converter e exibir o bitmap do QR Code
-  converterParaBitmap(imageData, width, height, startX, startY, scaledWidth, scaledHeight);
-  
-  // SEM TEXTO ALGUM! Apenas QR Code puro
-  
-  display.display();
-  estadoAtual = AGUARDAR_PAGAMENTO;
-  
-  free(pngData);
-  
-  // Mostrar também o código PIX no serial
-  Serial.println("\n=====================================");
-  Serial.println("       QR CODE REAL EXIBIDO NA TELA");
-  Serial.println("=====================================");
-  Serial.println("Valor: R$ " + String(valorDoacao, 2));
-  Serial.println("Payment ID: " + paymentId);
-  Serial.println();
-  Serial.println("ℹ️ QR Code baseado no PNG do Mercado Pago");
-  Serial.println("📱 Aponte a câmera do app de pagamento para a tela");
-  Serial.println();
-  Serial.println("=== CÓDIGO PIX COPIA E COLA (BACKUP) ===");
-  Serial.println(qrCodeData);
-  Serial.println("=====================================");
-  Serial.println("⏳ Aguardando confirmação do pagamento...");
-  
-  return true;
-}
-
 // Função para exibir QR Code REAL usando a biblioteca QRCodeGen (Nayuki)
 bool exibirQRCodeReal() {
   if (qrCodeData.length() == 0) {
@@ -1247,7 +849,7 @@ bool exibirQRCodeReal() {
   
   try {
     // Criar QR Code usando QRCodeGen (biblioteca profissional)
-    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(qrCodeData.c_str(), qrcodegen::QrCode::Ecc::LOW_ECC);
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(qrCodeData.c_str(), qrcodegen::QrCode::Ecc::MEDIUM_ECC);
     
     Serial.println("✅ QR Code gerado com sucesso!");
     Serial.println("📐 Tamanho: " + String(qr.getSize()) + "x" + String(qr.getSize()) + " módulos");
@@ -1280,7 +882,7 @@ bool exibirQRCodeReal() {
     int startX = (DISPLAY_WIDTH - qrDisplayWidth) / 2;
     int startY = (DISPLAY_HEIGHT - qrDisplayHeight) / 2;
     
-    Serial.println("� QR Code REAL na tela completa:");
+    Serial.println(" QR Code REAL na tela completa:");
     Serial.println("Tamanho do pixel: " + String(pixelSize) + " pixels");
     Serial.println("Tamanho total: " + String(qrDisplayWidth) + "x" + String(qrDisplayHeight));
     Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
@@ -1316,7 +918,7 @@ bool exibirQRCodeReal() {
     Serial.println();
     Serial.println("✨ QR Code gerado com biblioteca QRCodeGen (Nayuki)");
     Serial.println("📱 Este QR Code DEVE ser LEGÍVEL por qualquer app de pagamento!");
-    Serial.println("�️ Usando toda a tela 128x64 para máxima qualidade");
+    Serial.println("️ Usando toda a tela 128x64 para máxima qualidade");
     Serial.println();
     Serial.println("=== CÓDIGO PIX COPIA E COLA (BACKUP) ===");
     Serial.println(qrCodeData);
@@ -1332,4 +934,42 @@ bool exibirQRCodeReal() {
     Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
     return false;
   }
+}
+
+// ======= NOVO FLUXO: POLLING PARA NOME/VALOR DO RAILWAY =======
+void iniciarFluxoRailway() {
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println("Aguardando nome/valor...");
+  display.display();
+  Serial.println("\nAguardando nome/valor doador via Railway...");
+  aguardandoRailway = true;
+}
+
+void verificarRailway() {
+  if (!aguardandoRailway) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  // Substitua pela URL real do endpoint Railway
+  http.begin("https://your-railway-app-url.com/api/donation/latest");
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    String resp = http.getString();
+    DynamicJsonDocument doc(256);
+    DeserializationError err = deserializeJson(doc, resp);
+    if (!err) {
+      String nome = doc["nome"] | "";
+      float valor = doc["valor"] | 0.0;
+      if (nome.length() > 0 && valor > 0.0) {
+        railwayNome = nome;
+        railwayValor = valor;
+        aguardandoRailway = false;
+        Serial.println("Nome/valor recebidos: " + nome + " / R$ " + String(valor,2));
+        nomeDoUsuario = nome;
+        valorDoacao = valor;
+        criarPagamento(valor);
+      }
+    }
+  }
+  http.end();
 }
