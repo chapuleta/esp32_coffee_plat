@@ -6,6 +6,69 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <qrcodegen.hpp>
+#include "config.h"
+#include <Preferences.h>
+
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET     -1
+#define OLED_ADDRESS 0x3C
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+float saldoConta = 0.0;
+String paymentId = "";
+String qrCodeData = "";
+
+String ultimoContribuidor = "N/A";
+float ultimaContribuicao = 0.0;
+String maiorContribuidor = "N/A";
+float maiorContribuicao = 0.0;
+
+// Função para exibir QR Code de qualquer link na tela OLED
+void exibirQRCodeLink(String link) {
+  if (link.length() == 0) {
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Erro: Link vazio");
+    display.display();
+    return;
+  }
+  Serial.println("\n🚀 === QR CODE DE LINK ===");
+  Serial.println("Link: " + link);
+  Serial.println("Heap livre: " + String(ESP.getFreeHeap()) + " bytes");
+  try {
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(link.c_str(), qrcodegen::QrCode::Ecc::MEDIUM_ECC);
+    display.clearDisplay();
+    display.fillRect(0, 0, 128, 64, SSD1306_WHITE);
+    int pixelSize = std::min(128 / qr.getSize(), 64 / qr.getSize());
+    int qrDisplayWidth = qr.getSize() * pixelSize;
+    int qrDisplayHeight = qr.getSize() * pixelSize;
+    int startX = (128 - qrDisplayWidth) / 2;
+    int startY = (64 - qrDisplayHeight) / 2;
+    for (int y = 0; y < qr.getSize(); y++) {
+      for (int x = 0; x < qr.getSize(); x++) {
+        if (qr.getModule(x, y)) {
+          for (int py = 0; py < pixelSize; py++) {
+            for (int px = 0; px < pixelSize; px++) {
+              int screenX = startX + x * pixelSize + px;
+              int screenY = startY + y * pixelSize + py;
+              if (screenX >= 0 && screenX < 128 && screenY >= 0 && screenY < 64) {
+                display.drawPixel(screenX, screenY, SSD1306_BLACK);
+              }
+            }
+          }
+        }
+      }
+    }
+    display.display();
+    Serial.println("QR code de link exibido!");
+  } catch (const std::exception& e) {
+    Serial.println("Erro ao gerar QR code de link: " + String(e.what()));
+  }
+}
+#include <Adafruit_SSD1306.h>
 #include <qrcodegen.hpp>  // Nova biblioteca QR Code profissional (Nayuki)
 #include "config.h"
 #include <Preferences.h>
@@ -23,12 +86,13 @@ void mostrarQRCode();
 void verificarPagamento();
 bool exibirQRCodeReal(); // Função para QR Code REAL usando QRCodeGen (Nayuki)
 void handleWebServer(); // Adicione a declaração da função para o linker
+void verificarRailway(); // Declaração da função para polling do endpoint externo
+void iniciarFluxoDoacaoNome(); // Declaração para linker
 
 // Configurações da tela OLED
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET     -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Configurações WiFi
 const char* ssid = "ILZAMAGDA";
@@ -49,19 +113,9 @@ MenuState estadoAtual = MENU_INICIAL;
 
 // Valores pré-estabelecidos
 float valoresPredefinidos[] = {5.0, 10.0, 20.0, 50.0};
-int numValoresPredefinidos = NUM_VALORES_PREDEFINIDOS;
+int numValoresPredefinidos = sizeof(valoresPredefinidos) / sizeof(valoresPredefinidos[0]);
 int opcaoSelecionada = 0;
 
-// Dados de doações
-String ultimoContribuidor = "Ninguém";
-float ultimaContribuicao = 0.0;
-String maiorContribuidor = "Ninguém";
-float maiorContribuicao = 0.0;
-float saldoConta = 0.0;
-
-// Variáveis do pagamento
-String paymentId = "";
-String qrCodeData = "";
 float valorDoacao = 0.0;
 
 // Variáveis para valor personalizado
@@ -119,7 +173,41 @@ void setup() {
   mostrarInstrucoesSerial();
 }
 
+
+// Variáveis globais para nome do usuário
+bool aguardandoNomeUsuario = false;
+String nomeUsuarioBuffer = "";
+
 void loop() {
+
+  if (aguardandoNomeUsuario) {
+    // Espera o usuário digitar o nome no Serial
+    if (Serial.available()) {
+      char c = Serial.read();
+      if (c == '\n' || c == '\r') {
+        nomeUsuarioBuffer.trim();
+        if (nomeUsuarioBuffer.length() > 0) {
+          nomeDoUsuario = nomeUsuarioBuffer;
+          aguardandoNomeUsuario = false;
+          nomeUsuarioBuffer = "";
+          Serial.println("Nome confirmado: " + nomeDoUsuario);
+          mostrarMenuSelecaoValor();
+          mostrarInstrucoesSerial();
+        } else {
+          Serial.println("Nome vazio! Digite novamente:");
+        }
+      } else if (c == 27) { // ESC cancela
+        aguardandoNomeUsuario = false;
+        nomeUsuarioBuffer = "";
+        Serial.println("\nCancelado!");
+        mostrarMenuInicial();
+        mostrarInstrucoesSerial();
+      } else {
+        nomeUsuarioBuffer += c;
+      }
+    }
+    return;
+  }
   if (inserindoValorPersonalizado) {
     // Modo especial para entrada de valor personalizado - aguardar linha completa
     if (Serial.available()) {
@@ -159,24 +247,30 @@ void loop() {
     }
   }
   
-  // Verificar pagamento se estiver aguardando
-  if (estadoAtual == AGUARDAR_PAGAMENTO && paymentId != "") {
-    verificarPagamento();
-    delay(VERIFICACAO_PAGAMENTO_INTERVALO);
-  }
-  
-  handleWebServer(); // Mantém o servidor web ativo
+    // Polling para nome/valor doador via endpoint externo
+    if (aguardandoRailway) {
+        verificarRailway();
+        delay(2000); // Polling a cada 2 segundos
+    }
 
-  // ======= AUTO-REFRESH DO DISPLAY OLED QUANDO O SALDO MUDA NA FLASH =======
-  static float saldoContaAnterior = -9999.99;
-  float saldoAtualFlash = preferences.getFloat("saldo", 0.0);
-  if (fabs(saldoAtualFlash - saldoContaAnterior) > 0.001) {
-    saldoContaAnterior = saldoAtualFlash;
-    saldoConta = saldoAtualFlash;
-    mostrarMenuInicial();
-    // Opcional: mostrar instruções no serial
-    mostrarInstrucoesSerial();
-  }
+    // Verificar pagamento se estiver aguardando
+    if (estadoAtual == AGUARDAR_PAGAMENTO && paymentId != "") {
+        verificarPagamento();
+        delay(VERIFICACAO_PAGAMENTO_INTERVALO);
+    }
+
+    handleWebServer(); // Mantém o servidor web ativo
+
+    // ======= AUTO-REFRESH DO DISPLAY OLED QUANDO O SALDO MUDA NA FLASH =======
+    static float saldoContaAnterior = -9999.99;
+    float saldoAtualFlash = preferences.getFloat("saldo", 0.0);
+    if (fabs(saldoAtualFlash - saldoContaAnterior) > 0.001) {
+        saldoContaAnterior = saldoAtualFlash;
+        saldoConta = saldoAtualFlash;
+        mostrarMenuInicial();
+        // Opcional: mostrar instruções no serial
+        mostrarInstrucoesSerial();
+    }
 }
 
 // Função para buscar saldo da conta Mercado Pago
@@ -398,8 +492,8 @@ void processarComando(char comando) {
     } else if (comando == '2') {
       doacaoAnonima = false;
       aguardandoTipoDoacao = false;
-      // Inicia fluxo Railway para nome/valor
-      // iniciarFluxoRailway();
+      // Gera QR Code do formulário web e aguarda POST no endpoint local
+      iniciarFluxoDoacaoNome();
     }
     return;
   }
@@ -944,39 +1038,19 @@ bool exibirQRCodeReal() {
 }
 
 // ======= NOVO FLUXO: POLLING PARA NOME/VALOR DO RAILWAY =======
-void iniciarFluxoRailway() {
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("Aguardando nome/valor...");
-  display.display();
-  Serial.println("\nAguardando nome/valor doador via Railway...");
-  aguardandoRailway = true;
+// NOVO FLUXO: Recebe nome/valor via endpoint local do ESP32
+void iniciarFluxoDoacaoNome() {
+    // Gera QR code para página web externa onde o doador informa nome/valor
+    String urlForm = "https://seu-formulario.com?destino=http://" + WiFi.localIP().toString() + ":8080/doacao_nome";
+    exibirQRCodeLink(urlForm);
+    Serial.println("\nAguardando envio de nome/valor via endpoint local...");
 }
 
-void verificarRailway() {
-  if (!aguardandoRailway) return;
-  if (WiFi.status() != WL_CONNECTED) return;
-  HTTPClient http;
-  // Substitua pela URL real do endpoint Railway
-  http.begin("https://your-railway-app-url.com/api/donation/latest");
-  int httpCode = http.GET();
-  if (httpCode == 200) {
-    String resp = http.getString();
-    DynamicJsonDocument doc(256);
-    DeserializationError err = deserializeJson(doc, resp);
-    if (!err) {
-      String nome = doc["nome"] | "";
-      float valor = doc["valor"] | 0.0;
-      if (nome.length() > 0 && valor > 0.0) {
-        railwayNome = nome;
-        railwayValor = valor;
-        aguardandoRailway = false;
-        Serial.println("Nome/valor recebidos: " + nome + " / R$ " + String(valor,2));
+// Função para ser chamada pelo endpoint /doacao_nome
+void receberDoacaoNome(String nome, float valor) {
+    if (nome.length() > 0 && valor > 0.0) {
         nomeDoUsuario = nome;
         valorDoacao = valor;
         criarPagamento(valor);
-      }
     }
-  }
-  http.end();
 }
