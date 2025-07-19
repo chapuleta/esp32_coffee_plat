@@ -76,6 +76,7 @@ void exibirQRCodeLink(String link) {
 extern Preferences preferences;
 Preferences preferences; // Definindo a instância global de Preferences
 
+
 // Declarações das funções
 void mostrarMenuInicial();
 void mostrarMenuSelecaoValor();
@@ -86,8 +87,46 @@ void mostrarQRCode();
 void verificarPagamento();
 bool exibirQRCodeReal(); // Função para QR Code REAL usando QRCodeGen (Nayuki)
 void handleWebServer(); // Adicione a declaração da função para o linker
-void verificarRailway(); // Declaração da função para polling do endpoint externo
+void verificarRailway() {
+  // Função stub: implementar polling do endpoint Railway se necessário
+}
 void iniciarFluxoDoacaoNome(); // Declaração para linker
+
+void receberDoacaoNome(String nome, float valor);
+
+#include <WebServer.h>
+WebServer server(80);
+
+// Endpoint para servir o formulário HTML
+void handleForm() {
+  String html = "<html><head><title>Doação com Nome</title></head><body>";
+  html += "<h2>Doação com Nome</h2>";
+  html += "<form method='POST' action='/doacao_nome'>";
+  html += "Nome: <input type='text' name='nome'><br>";
+  html += "Valor: <input type='number' step='0.01' name='valor'><br>";
+  html += "<input type='submit' value='Doar'>";
+  html += "</form></body></html>";
+  server.send(200, "text/html", html);
+}
+
+// Endpoint para receber o POST do formulário
+void handleDoacaoNome() {
+  String nome = server.hasArg("nome") ? server.arg("nome") : "";
+  float valor = server.hasArg("valor") ? server.arg("valor").toFloat() : 0.0;
+  receberDoacaoNome(nome, valor);
+  server.send(200, "text/html", "<html><body><h2>Obrigado pela doação!</h2></body></html>");
+}
+
+void startWebServer() {
+  server.on("/form", handleForm);
+  server.on("/doacao_nome", HTTP_POST, handleDoacaoNome);
+  server.begin();
+  Serial.println("Servidor web iniciado!");
+}
+
+void handleWebServer() {
+  server.handleClient();
+}
 
 // Configurações da tela OLED
 #define SCREEN_WIDTH 128
