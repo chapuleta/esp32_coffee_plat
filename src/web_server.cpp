@@ -2,7 +2,7 @@
 #include <WebServer.h>
 #include <Preferences.h>
 
-Preferences preferences;
+extern Preferences preferences;
 WebServer server(80);
 
 const char* login_username = "admin";
@@ -56,7 +56,7 @@ void handleSetSaldo() {
 }
 
 void startWebServer() {
-  preferences.begin("doacoes", false);
+  // preferences.begin("doacoes", false); // Já inicializado no main.cpp
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
   server.on("/set_saldo", handleSetSaldo);

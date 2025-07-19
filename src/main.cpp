@@ -11,6 +11,7 @@
 #include <Preferences.h>
 
 extern Preferences preferences;
+Preferences preferences; // Definindo a instância global de Preferences
 
 // Declarações das funções
 void mostrarMenuInicial();
@@ -97,27 +98,25 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
   display.println("Inicializando...");
-  display.display();
-  
+  // Removido: exibição do saldo antes do WiFi conectar
   // Conectar ao WiFi
   WiFi.begin(ssid, password);
   Serial.print("Conectando ao WiFi");
-  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  
   Serial.println();
   Serial.println("WiFi conectado!");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
-  
-  mostrarMenuInicial();
-  mostrarInstrucoesSerial();
-  // Iniciar servidor web
+
+  // Iniciar servidor web SOMENTE após WiFi conectar
   extern void startWebServer();
   startWebServer();
+
+  mostrarMenuInicial();
+  mostrarInstrucoesSerial();
 }
 
 void loop() {
@@ -205,29 +204,24 @@ void mostrarMenuInicial() {
   saldoConta = preferences.getFloat("saldo", 0.0); // Atualiza saldo da flash
   atualizarSaldoConta(); // Atualiza saldo Mercado Pago
   display.clearDisplay();
-  display.setTextSize(1);
+  display.setTextSize(2); // Saldo em destaque
   display.setCursor(0,0);
-  display.println("=== CAIXA DE DOACOES ===");
+  display.print("R$ ");
+  display.println(saldoConta, 2);
+  display.setTextSize(1);
   display.println();
-  
   display.print("Ultimo: ");
   display.println(ultimoContribuidor);
   display.print("R$ ");
   display.println(ultimaContribuicao, 2);
   display.println();
-  
   display.print("Maior: ");
   display.println(maiorContribuidor);
   display.print("R$ ");
   display.println(maiorContribuicao, 2);
-  display.println();
-  
-  display.print("Saldo: R$ ");
-  display.println(saldoConta, 2);
-  
   display.display();
   estadoAtual = MENU_INICIAL;
-  
+
   // Espelhar no monitor serial
   Serial.println("\n=== CAIXA DE DOACOES ===");
   Serial.println();
