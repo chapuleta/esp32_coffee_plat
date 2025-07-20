@@ -201,9 +201,21 @@ void handleDoacaoNome() {
   server.send(200, "text/html", "<html><body><h2>Obrigado pela doação!</h2></body></html>");
 }
 
+// Declarações das funções do web_server.cpp
+void handleRoot();
+void handleLogin();
+void handleSetSaldo();
+
 void startWebServer() {
+  // Rotas para doação
   server.on("/form", handleForm);
   server.on("/doacao_nome", HTTP_POST, handleDoacaoNome);
+
+  // Rotas para administração do saldo
+  server.on("/", handleRoot);
+  server.on("/login", HTTP_POST, handleLogin);
+  server.on("/set_saldo", HTTP_POST, handleSetSaldo);
+  
   server.begin();
   Serial.println("Servidor web iniciado!");
 }
