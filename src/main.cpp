@@ -216,6 +216,10 @@ void setup() {
   Serial.begin(115200);
   preferences.begin("doacoes", false);
   saldoConta = preferences.getFloat("saldo", 0.0);
+  ultimoContribuidor = preferences.getString("ultimoDoador", "N/A");
+  ultimaContribuicao = preferences.getFloat("ultimaDoacao", 0.0);
+  maiorContribuidor = preferences.getString("maiorDoador", "N/A");
+  maiorContribuicao = preferences.getFloat("maiorDoacao", 0.0);
   carregarExtratoDaFlash();
   
   // Inicializar display OLED
@@ -890,6 +894,8 @@ void verificarPagamento() {
 
           ultimaContribuicao = valorPago;
           ultimoContribuidor = nomeDoador;
+          preferences.putFloat("ultimaDoacao", ultimaContribuicao);
+          preferences.putString("ultimoDoador", ultimoContribuidor);
           saldoConta += valorPago;
           atualizarSaldoContaFlash(saldoConta);
 
@@ -900,6 +906,8 @@ void verificarPagamento() {
           if (valorPago > maiorContribuicao) {
             maiorContribuicao = valorPago;
             maiorContribuidor = ultimoContribuidor;
+            preferences.putFloat("maiorDoacao", maiorContribuicao);
+            preferences.putString("maiorDoador", maiorContribuidor);
             Serial.println(String("🏆 NOVO MAIOR DOADOR: ") + String(maiorContribuicao) + " - R$ " + String(maiorContribuicao, 2));
           }
 
