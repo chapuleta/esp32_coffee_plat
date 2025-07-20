@@ -1069,12 +1069,6 @@ void receberDoacaoNome(String nome, float valor) {
     if (nome.length() > 0 && valor > 0.0) {
         nomeDoUsuario = nome;
         valorDoacao = valor;
-        ultimoContribuidor = nome;
-        ultimaContribuicao = valor;
-        if (valor > maiorContribuicao) {
-            maiorContribuicao = valor;
-            maiorContribuidor = nome;
-        }
         if (numDoacoes < MAX_EXTRATO) {
             extratoDoacoes[numDoacoes].nome = nome;
             extratoDoacoes[numDoacoes].valor = valor;
