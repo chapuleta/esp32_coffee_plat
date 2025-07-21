@@ -1155,28 +1155,27 @@ void mostrarLetreiro() {
   String texto1 = "Ultimo: " + getPrimeirosDoisNomes(ultimoContribuidor);
   String texto2 = "Maior: " + getPrimeirosDoisNomes(maiorContribuidor);
 
-  int16_t x1, y1;
-  uint16_t w1, h1;
+  // Calcula a largura em pixels de cada string
+  int16_t x1, y1, x2, y2;
+  uint16_t w1, h1, w2, h2;
   display.getTextBounds(texto1, 0, 0, &x1, &y1, &w1, &h1);
-
-  for (int i = SCREEN_WIDTH; i > -w1; i--) {
-    display.clearDisplay();
-    display.setCursor(i, 10);
-    display.print(texto1);
-    display.display();
-    delay(10);
-  }
-
-  delay(500);
-
-  int16_t x2, y2;
-  uint16_t w2, h2;
   display.getTextBounds(texto2, 0, 0, &x2, &y2, &w2, &h2);
 
-  for (int i = SCREEN_WIDTH; i > -w2; i--) {
+  // Determina a largura da string mais longa para controlar o loop
+  int max_w = max(w1, w2);
+
+  // O loop vai rolar o texto da direita para a esquerda
+  for (int i = SCREEN_WIDTH; i > -max_w; i--) {
     display.clearDisplay();
+
+    // Define o cursor para a primeira linha e imprime
+    display.setCursor(i, 10);
+    display.print(texto1);
+
+    // Define o cursor para a segunda linha e imprime
     display.setCursor(i, 40);
     display.print(texto2);
+
     display.display();
     delay(10);
   }
