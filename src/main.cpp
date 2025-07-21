@@ -57,7 +57,9 @@ int x_ultimo_pos;
 int x_maior_pos;
 unsigned long last_scroll_time = 0;
 
-#define SCROLL_PADDING 5 // Pixels de espaçamento entre as repetições do texto
+#define SCROLL_SPEED 1 // Pixels por frame
+#define SCROLL_DELAY 25 // Milissegundos por frame (aprox. 40 fps)
+#define MAX_DISPLAY_NAME_LENGTH 15 // Limite de caracteres para o nome a ser exibido
 
 // Variáveis para valor personalizado
 bool inserindoValorPersonalizado = false;
@@ -120,7 +122,11 @@ String getFirstTwoNames(String fullName) {
   if (secondSpace == -1) {
     return fullName; // Apenas dois nomes
   }
-  return fullName.substring(0, secondSpace);
+  String twoNames = fullName.substring(0, secondSpace);
+  if (twoNames.length() > MAX_DISPLAY_NAME_LENGTH) {
+    return twoNames.substring(0, MAX_DISPLAY_NAME_LENGTH - 3) + "...";
+  }
+  return twoNames;
 }
 
 
@@ -264,6 +270,7 @@ void setup() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
+  display.setTextWrap(false);
   display.setCursor(0,0);
   display.println("Inicializando...");
   display.display();
@@ -288,60 +295,48 @@ void setup() {
 }
 
 void animarMenuInicial() {
-    if (estadoAtual != MENU_INICIAL) return; // Apenas anima se estiver no estado MENU_INICIAL
+    if (estadoAtual != MENU_INICIAL) return;
 
-    if (millis() - last_scroll_time > 25) { // Controla a velocidade (aprox. 40 fps)
-        display.clearDisplay(); // Limpa a tela para redesenhar
+    if (millis() - last_scroll_time > SCROLL_DELAY) {
+        display.clearDisplay();
 
-        // 1. Desenha o saldo (estático no topo)
+        // 1. Prepara os textos para as duas linhas com fonte maior
         display.setTextSize(2);
-        display.setCursor(0, 0);
-        display.print("R$ ");
-        display.print(saldoConta, 2);
+        char bufferMaior[128];
+        char bufferUltimo[128];
 
-        // 2. Prepara os textos em buffers de caracteres e calcula suas larguras
-        display.setTextSize(1);
-        char bufferUltimo[128]; // Aumentado para 128 para maior segurança
-        char bufferMaior[128];  // Aumentado para 128 para maior segurança
-
-        // Extrai apenas os dois primeiros nomes
-        String truncatedUltimo = getFirstTwoNames(ultimoContribuidor);
         String truncatedMaior = getFirstTwoNames(maiorContribuidor);
+        String truncatedUltimo = getFirstTwoNames(ultimoContribuidor);
 
-        // Adiciona espaços no final para garantir separação visual
-        sprintf(bufferUltimo, "Ultimo: %s - R$ %.2f   ", truncatedUltimo.c_str(), ultimaContribuicao);
-        sprintf(bufferMaior, "Maior: %s - R$ %.2f   ", truncatedMaior.c_str(), maiorContribuicao);
-        
+        sprintf(bufferMaior, "Maior: %s (R$%.2f)", truncatedMaior.c_str(), maiorContribuicao);
+        sprintf(bufferUltimo, "Ultimo: %s (R$%.2f)", truncatedUltimo.c_str(), ultimaContribuicao);
+
         int16_t x1, y1;
-        uint16_t w_ultimo, h_ultimo, w_maior, h_maior;
-        display.getTextBounds(bufferUltimo, 0, 0, &x1, &y1, &w_ultimo, &h_ultimo);
-        display.getTextBounds(bufferMaior, 0, 0, &x1, &y1, &w_maior, &h_maior);
+        uint16_t w_maior_text, h_maior, w_ultimo_text, h_ultimo;
+        display.getTextBounds(bufferMaior, 0, 0, &x1, &y1, &w_maior_text, &h_maior);
+        display.getTextBounds(bufferUltimo, 0, 0, &x1, &y1, &w_ultimo_text, &h_ultimo);
 
-        // Adiciona o padding ao tamanho calculado do texto
-        w_ultimo += SCROLL_PADDING;
-        w_maior += SCROLL_PADDING;
+        // Posições Y para as duas linhas, centralizadas verticalmente
+        const int y_maior_linha = 10;
+        const int y_ultimo_linha = 40;
 
-        // Posições Y para as linhas
-        const int y_ultimo_linha = 24;
-        const int y_maior_linha = 40;
-
-        // 3. Atualiza e desenha a linha "Ultimo"
-        x_ultimo_pos--;
-        if (x_ultimo_pos < -(int)w_ultimo) {
-            x_ultimo_pos = SCREEN_WIDTH; // Reinicia a posição para criar o loop contínuo
-        }
-        display.setCursor(x_ultimo_pos, y_ultimo_linha);
-        display.print(bufferUltimo);
-
-        // 4. Atualiza e desenha a linha "Maior"
-        x_maior_pos--;
-        if (x_maior_pos < -(int)w_maior) {
-            x_maior_pos = SCREEN_WIDTH; // Reinicia a posição para criar o loop contínuo
+        // 2. Atualiza e desenha a linha "Maior"
+        x_maior_pos -= SCROLL_SPEED;
+        if (x_maior_pos < -(int)w_maior_text) {
+            x_maior_pos = SCREEN_WIDTH;
         }
         display.setCursor(x_maior_pos, y_maior_linha);
         display.print(bufferMaior);
 
-        // 5. Envia o buffer para a tela
+        // 3. Atualiza e desenha a linha "Ultimo"
+        x_ultimo_pos -= SCROLL_SPEED;
+        if (x_ultimo_pos < -(int)w_ultimo_text) {
+            x_ultimo_pos = SCREEN_WIDTH;
+        }
+        display.setCursor(x_ultimo_pos, y_ultimo_linha);
+        display.print(bufferUltimo);
+
+        // 4. Envia o buffer para a tela
         display.display();
         last_scroll_time = millis();
     }
@@ -800,6 +795,7 @@ void criarPagamento(float valor) {
         mostrarQRCode();
     }
   }
+  
   else {
     Serial.print("Erro na requisição: ");
     Serial.println(httpResponseCode);
@@ -1074,8 +1070,6 @@ bool exibirQRCodeReal() {
     const int DISPLAY_HEIGHT = 64;
     
     int pixelSize = std::min(DISPLAY_WIDTH / qr.getSize(), DISPLAY_HEIGHT / qr.getSize());
-    int qrDisplayWidth = qr.getSize() * pixelSize;
-    int qrDisplayHeight = qr.getSize() * pixelSize;
     
     if (pixelSize < 1) {
       Serial.println("❌ ERRO: QR Code muito grande para a tela");
@@ -1084,13 +1078,8 @@ bool exibirQRCodeReal() {
       return false;
     }
     
-    int startX = (DISPLAY_WIDTH - qrDisplayWidth) / 2;
-    int startY = (64 - qrDisplayHeight) / 2;
-    
-    Serial.println(" QR Code REAL na tela completa:");
-    Serial.println("Tamanho do pixel: " + String(pixelSize) + " pixels");
-    Serial.println("Tamanho total: " + String(qrDisplayWidth) + "x" + String(qrDisplayHeight));
-    Serial.println("Posição: (" + String(startX) + "," + String(startY) + ")");
+    int startX = (DISPLAY_WIDTH - (qr.getSize() * pixelSize)) / 2;
+    int startY = (DISPLAY_HEIGHT - (qr.getSize() * pixelSize)) / 2;
     
     for (int y = 0; y < qr.getSize(); y++) {
       for (int x = 0; x < qr.getSize(); x++) {
