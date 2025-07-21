@@ -300,7 +300,13 @@ void animarMenuInicial() {
     if (millis() - last_scroll_time > SCROLL_DELAY) {
         display.clearDisplay();
 
-        // 1. Prepara os textos para as duas linhas com fonte maior
+        // 1. Desenha o saldo (estático no topo)
+        display.setTextSize(1);
+        display.setCursor(0, 0);
+        display.print("Saldo: R$");
+        display.print(saldoConta, 2);
+
+        // 2. Prepara os textos para as duas linhas com fonte maior
         display.setTextSize(2);
         char bufferMaior[128];
         char bufferUltimo[128];
@@ -316,11 +322,11 @@ void animarMenuInicial() {
         display.getTextBounds(bufferMaior, 0, 0, &x1, &y1, &w_maior_text, &h_maior);
         display.getTextBounds(bufferUltimo, 0, 0, &x1, &y1, &w_ultimo_text, &h_ultimo);
 
-        // Posições Y para as duas linhas, centralizadas verticalmente
-        const int y_maior_linha = 10;
-        const int y_ultimo_linha = 40;
+        // Posições Y para as duas linhas, abaixo do saldo
+        const int y_maior_linha = 20;
+        const int y_ultimo_linha = 44;
 
-        // 2. Atualiza e desenha a linha "Maior"
+        // 3. Atualiza e desenha a linha "Maior"
         x_maior_pos -= SCROLL_SPEED;
         if (x_maior_pos < -(int)w_maior_text) {
             x_maior_pos = SCREEN_WIDTH;
@@ -328,7 +334,7 @@ void animarMenuInicial() {
         display.setCursor(x_maior_pos, y_maior_linha);
         display.print(bufferMaior);
 
-        // 3. Atualiza e desenha a linha "Ultimo"
+        // 4. Atualiza e desenha a linha "Ultimo"
         x_ultimo_pos -= SCROLL_SPEED;
         if (x_ultimo_pos < -(int)w_ultimo_text) {
             x_ultimo_pos = SCREEN_WIDTH;
@@ -336,7 +342,7 @@ void animarMenuInicial() {
         display.setCursor(x_ultimo_pos, y_ultimo_linha);
         display.print(bufferUltimo);
 
-        // 4. Envia o buffer para a tela
+        // 5. Envia o buffer para a tela
         display.display();
         last_scroll_time = millis();
     }
