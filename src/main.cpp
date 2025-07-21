@@ -103,6 +103,7 @@ void mostrarPerguntaTipoDoacao();
 void criarPagamentoRailwayFlow();
 void mostrarPerguntaNomeUsuario();
 void mostrarLetreiro();
+String getPrimeirosDoisNomes(String nomeCompleto);
 void mostrarLetreiro();
 
 
@@ -246,6 +247,7 @@ void setup() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
+  display.setTextWrap(false);
   display.setCursor(0,0);
   display.println("Inicializando...");
   display.display();
@@ -420,12 +422,12 @@ void mostrarMenuInicial() {
   display.setTextSize(1);
   display.println();
   display.print("Ultimo: ");
-  display.println(ultimoContribuidor);
+  display.println(getPrimeirosDoisNomes(ultimoContribuidor));
   display.print("R$ ");
   display.println(ultimaContribuicao, 2);
   display.println();
   display.print("Maior: ");
-  display.println(maiorContribuidor);
+  display.println(getPrimeirosDoisNomes(maiorContribuidor));
   display.print("R$ ");
   display.println(maiorContribuicao, 2);
   display.display();
@@ -933,7 +935,7 @@ void verificarPagamento() {
           }
 
           ultimaContribuicao = valorPago;
-          ultimoContribuidor = nomeDoador;
+          ultimoContribuidor = nomeDoador; // Salva o nome completo
           preferences.putFloat("ultimaDoacao", ultimaContribuicao);
           preferences.putString("ultimoDoador", ultimoContribuidor);
           saldoConta += valorPago;
@@ -945,10 +947,10 @@ void verificarPagamento() {
 
           if (valorPago > maiorContribuicao) {
             maiorContribuicao = valorPago;
-            maiorContribuidor = ultimoContribuidor;
+            maiorContribuidor = nomeDoador; // Salva o nome completo
             preferences.putFloat("maiorDoacao", maiorContribuicao);
             preferences.putString("maiorDoador", maiorContribuidor);
-            Serial.println(String("🏆 NOVO MAIOR DOADOR: ") + String(maiorContribuicao) + " - R$ " + String(maiorContribuicao, 2));
+            Serial.println(String("🏆 NOVO MAIOR DOADOR: ") + maiorContribuidor + " - R$ " + String(maiorContribuicao, 2));
           }
 
           display.clearDisplay();
@@ -957,7 +959,7 @@ void verificarPagamento() {
           display.println("PAGAMENTO APROVADO!");
           display.println();
           display.print("Doador: ");
-          display.println(nomeDoador);
+          display.println(getPrimeirosDoisNomes(nomeDoador));
           display.print("Valor: R$ ");
           display.println(valorPago, 2);
           display.println();
@@ -1132,13 +1134,26 @@ void verificarRailway() {
   // Função stub: implementar polling do endpoint Railway se necessário
 }
 
+String getPrimeirosDoisNomes(String nomeCompleto) {
+  nomeCompleto.trim();
+  int primeiroEspaco = nomeCompleto.indexOf(' ');
+  if (primeiroEspaco == -1) {
+    return nomeCompleto;
+  }
+  int segundoEspaco = nomeCompleto.indexOf(' ', primeiroEspaco + 1);
+  if (segundoEspaco == -1) {
+    return nomeCompleto;
+  }
+  return nomeCompleto.substring(0, segundoEspaco);
+}
+
 void mostrarLetreiro() {
   display.clearDisplay();
   display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
 
-  String texto1 = "Ultimo: " + ultimoContribuidor;
-  String texto2 = "Maior: " + maiorContribuidor;
+  String texto1 = "Ultimo: " + getPrimeirosDoisNomes(ultimoContribuidor);
+  String texto2 = "Maior: " + getPrimeirosDoisNomes(maiorContribuidor);
 
   int16_t x1, y1;
   uint16_t w1, h1;
