@@ -31,7 +31,8 @@ enum MenuState {
   MENU_INICIAL,
   SELECIONAR_VALOR,
   MOSTRAR_QR,
-  AGUARDAR_PAGAMENTO
+  AGUARDAR_PAGAMENTO,
+  MOSTRAR_LETREIRO
 };
 MenuState estadoAtual = MENU_INICIAL;
 
@@ -101,6 +102,8 @@ void atualizarSaldoContaFlash(float novoSaldo);
 void mostrarPerguntaTipoDoacao();
 void criarPagamentoRailwayFlow();
 void mostrarPerguntaNomeUsuario();
+void mostrarLetreiro();
+void mostrarLetreiro();
 
 
 // Função para salvar extrato na flash
@@ -267,6 +270,29 @@ void setup() {
 }
 
 void loop() {
+  static unsigned long lastSwitchTime = 0;
+  unsigned long currentTime = millis();
+
+  if (currentTime - lastSwitchTime > 15000) { // Alterna a cada 15 segundos
+    lastSwitchTime = currentTime;
+    if (estadoAtual == MENU_INICIAL) {
+      estadoAtual = MOSTRAR_LETREIRO;
+    } else {
+      mostrarMenuInicial();
+    }
+  }
+
+  if (estadoAtual == MOSTRAR_LETREIRO) {
+    mostrarLetreiro();
+    if (Serial.available()) { // Permite sair do modo letreiro
+        char comando = Serial.read();
+        if (comando == '0') {
+            mostrarMenuInicial();
+        }
+    }
+    return; // Pula o resto do loop
+  }
+
   if (aguardandoNomeUsuario) {
     if (Serial.available()) {
       char c = Serial.read();
@@ -573,6 +599,8 @@ void processarComando(char comando) {
   else if (comando == '0') {
     mostrarMenuInicial();
     mostrarInstrucoesSerial();
+  } else if (comando == 'l' || comando == 'L') {
+    estadoAtual = MOSTRAR_LETREIRO;
   }
   else if (estadoAtual == SELECIONAR_VALOR) {
     if ((comando == 'w' || comando == 'W') && opcaoSelecionada > 0) {
@@ -1102,4 +1130,39 @@ void receberDoacaoNome(String nome, float valor) {
 
 void verificarRailway() {
   // Função stub: implementar polling do endpoint Railway se necessário
+}
+
+void mostrarLetreiro() {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+
+  String texto1 = "Ultimo: " + ultimoContribuidor;
+  String texto2 = "Maior: " + maiorContribuidor;
+
+  int16_t x1, y1;
+  uint16_t w1, h1;
+  display.getTextBounds(texto1, 0, 0, &x1, &y1, &w1, &h1);
+
+  for (int i = SCREEN_WIDTH; i > -w1; i--) {
+    display.clearDisplay();
+    display.setCursor(i, 10);
+    display.print(texto1);
+    display.display();
+    delay(10);
+  }
+
+  delay(500);
+
+  int16_t x2, y2;
+  uint16_t w2, h2;
+  display.getTextBounds(texto2, 0, 0, &x2, &y2, &w2, &h2);
+
+  for (int i = SCREEN_WIDTH; i > -w2; i--) {
+    display.clearDisplay();
+    display.setCursor(i, 40);
+    display.print(texto2);
+    display.display();
+    delay(10);
+  }
 }
