@@ -52,6 +52,13 @@ float maiorContribuicao = 0.0;
 #define OLED_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// Variáveis para o letreiro contínuo
+int x_ultimo_pos;
+int x_maior_pos;
+unsigned long last_scroll_time = 0;
+
+#define SCROLL_PADDING 5 // Pixels de espaçamento entre as repetições do texto
+
 // Variáveis para valor personalizado
 bool inserindoValorPersonalizado = false;
 String valorPersonalizadoStr = "";
@@ -101,6 +108,20 @@ void atualizarSaldoContaFlash(float novoSaldo);
 void mostrarPerguntaTipoDoacao();
 void criarPagamentoRailwayFlow();
 void mostrarPerguntaNomeUsuario();
+void animarMenuInicial();
+
+// Função auxiliar para obter os dois primeiros nomes
+String getFirstTwoNames(String fullName) {
+  int firstSpace = fullName.indexOf(' ');
+  if (firstSpace == -1) {
+    return fullName; // Apenas um nome
+  }
+  int secondSpace = fullName.indexOf(' ', firstSpace + 1);
+  if (secondSpace == -1) {
+    return fullName; // Apenas dois nomes
+  }
+  return fullName.substring(0, secondSpace);
+}
 
 
 // Função para salvar extrato na flash
@@ -266,7 +287,71 @@ void setup() {
   mostrarInstrucoesSerial();
 }
 
+void animarMenuInicial() {
+    if (estadoAtual != MENU_INICIAL) return; // Apenas anima se estiver no estado MENU_INICIAL
+
+    if (millis() - last_scroll_time > 25) { // Controla a velocidade (aprox. 40 fps)
+        display.clearDisplay(); // Limpa a tela para redesenhar
+
+        // 1. Desenha o saldo (estático no topo)
+        display.setTextSize(2);
+        display.setCursor(0, 0);
+        display.print("R$ ");
+        display.print(saldoConta, 2);
+
+        // 2. Prepara os textos em buffers de caracteres e calcula suas larguras
+        display.setTextSize(1);
+        char bufferUltimo[128]; // Aumentado para 128 para maior segurança
+        char bufferMaior[128];  // Aumentado para 128 para maior segurança
+
+        // Extrai apenas os dois primeiros nomes
+        String truncatedUltimo = getFirstTwoNames(ultimoContribuidor);
+        String truncatedMaior = getFirstTwoNames(maiorContribuidor);
+
+        // Adiciona espaços no final para garantir separação visual
+        sprintf(bufferUltimo, "Ultimo: %s - R$ %.2f   ", truncatedUltimo.c_str(), ultimaContribuicao);
+        sprintf(bufferMaior, "Maior: %s - R$ %.2f   ", truncatedMaior.c_str(), maiorContribuicao);
+        
+        int16_t x1, y1;
+        uint16_t w_ultimo, h_ultimo, w_maior, h_maior;
+        display.getTextBounds(bufferUltimo, 0, 0, &x1, &y1, &w_ultimo, &h_ultimo);
+        display.getTextBounds(bufferMaior, 0, 0, &x1, &y1, &w_maior, &h_maior);
+
+        // Adiciona o padding ao tamanho calculado do texto
+        w_ultimo += SCROLL_PADDING;
+        w_maior += SCROLL_PADDING;
+
+        // Posições Y para as linhas
+        const int y_ultimo_linha = 24;
+        const int y_maior_linha = 40;
+
+        // 3. Atualiza e desenha a linha "Ultimo"
+        x_ultimo_pos--;
+        if (x_ultimo_pos < -(int)w_ultimo) {
+            x_ultimo_pos = SCREEN_WIDTH; // Reinicia a posição para criar o loop contínuo
+        }
+        display.setCursor(x_ultimo_pos, y_ultimo_linha);
+        display.print(bufferUltimo);
+
+        // 4. Atualiza e desenha a linha "Maior"
+        x_maior_pos--;
+        if (x_maior_pos < -(int)w_maior) {
+            x_maior_pos = SCREEN_WIDTH; // Reinicia a posição para criar o loop contínuo
+        }
+        display.setCursor(x_maior_pos, y_maior_linha);
+        display.print(bufferMaior);
+
+        // 5. Envia o buffer para a tela
+        display.display();
+        last_scroll_time = millis();
+    }
+}
+
 void loop() {
+  if (estadoAtual == MENU_INICIAL) {
+      animarMenuInicial();
+  }
+
   if (aguardandoNomeUsuario) {
     if (Serial.available()) {
       char c = Serial.read();
@@ -288,7 +373,8 @@ void loop() {
         Serial.println("\nCancelado!");
         mostrarMenuInicial();
         mostrarInstrucoesSerial();
-      } else {
+      }
+      else {
         nomeUsuarioBuffer += c;
       }
     }
@@ -386,24 +472,11 @@ void atualizarSaldoContaFlash(float novoSaldo) {
 void mostrarMenuInicial() {
   saldoConta = preferences.getFloat("saldo", 0.0);
   atualizarSaldoConta();
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setCursor(0,0);
-  display.print("R$ ");
-  display.println(saldoConta, 2);
-  display.setTextSize(1);
-  display.println();
-  display.print("Ultimo: ");
-  display.println(ultimoContribuidor);
-  display.print("R$ ");
-  display.println(ultimaContribuicao, 2);
-  display.println();
-  display.print("Maior: ");
-  display.println(maiorContribuidor);
-  display.print("R$ ");
-  display.println(maiorContribuicao, 2);
-  display.display();
+
+  // Apenas define o estado e reinicia as posições de rolagem.
   estadoAtual = MENU_INICIAL;
+  x_ultimo_pos = SCREEN_WIDTH; // Inicia fora da tela à direita
+  x_maior_pos = SCREEN_WIDTH; // Inicia fora da tela à direita
 
   Serial.println("\n=== CAIXA DE DOACOES ===");
   Serial.println();
@@ -454,7 +527,8 @@ void mostrarMenuSelecaoValor() {
   for (int i = 0; i < numValoresPredefinidos; i++) {
     if (i == opcaoSelecionada) {
       Serial.print("> ");
-    } else {
+    }
+    else {
       Serial.print("  ");
     }
     Serial.print("R$ ");
@@ -463,7 +537,8 @@ void mostrarMenuSelecaoValor() {
   
   if (opcaoSelecionada == numValoresPredefinidos) {
     Serial.print("> ");
-  } else {
+  }
+  else {
     Serial.print("  ");
   }
   Serial.println("Valor personalizado");
@@ -475,7 +550,8 @@ void mostrarInstrucoesSerial() {
   if (estadoAtual == MENU_INICIAL) {
     Serial.println("1 - Fazer doação");
     Serial.println("0 - Voltar ao menu inicial");
-  } else if (estadoAtual == SELECIONAR_VALOR) {
+  }
+  else if (estadoAtual == SELECIONAR_VALOR) {
     if (inserindoValorPersonalizado) {
       Serial.println("Digite o valor e pressione ENTER");
       Serial.println("ESC - Cancelar");
@@ -612,8 +688,10 @@ void criarPagamentoRailwayFlow() {
   try {
     qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(railwayUrl.c_str(), qrcodegen::QrCode::Ecc::MEDIUM_ECC);
     int pixelSize = std::min(128 / qr.getSize(), 64 / qr.getSize());
-    int startX = (128 - qr.getSize() * pixelSize) / 2;
-    int startY = (64 - qr.getSize() * pixelSize) / 2;
+    int qrDisplayWidth = qr.getSize() * pixelSize;
+    int qrDisplayHeight = qr.getSize() * pixelSize;
+    int startX = (128 - qrDisplayWidth) / 2;
+    int startY = (64 - qrDisplayHeight) / 2;
     for (int y = 0; y < qr.getSize(); y++) {
       for (int x = 0; x < qr.getSize(); x++) {
         if (qr.getModule(x, y)) {
@@ -716,11 +794,13 @@ void criarPagamento(float valor) {
           mostrarQRCode();
         }
       }
-    } else {
+    }
+    else {
         Serial.println("✗ Erro ao extrair QR Code da resposta da API.");
         mostrarQRCode();
     }
-  } else {
+  }
+  else {
     Serial.print("Erro na requisição: ");
     Serial.println(httpResponseCode);
     String response = http.getString();
@@ -775,9 +855,7 @@ void mostrarQRCode() {
   Serial.println("Valor: R$ " + String(valorDoacao, 2));
   Serial.println("Payment ID: " + paymentId);
   Serial.println();
-  Serial.println("=== CÓDIGO PIX COPIA E COLA ===");
-  Serial.println("(Copie o código abaixo no app do seu banco)");
-  Serial.println();
+  Serial.println("=== CÓDIGO PIX COPIA E COLA (BACKUP) ===");
   Serial.println(qrCodeData);
   Serial.println();
   Serial.println("=====================================");
@@ -814,6 +892,7 @@ void verificarPagamento() {
   http.addHeader("Authorization", "Bearer " + String(MERCADO_PAGO_TOKEN));
   
   int httpResponseCode = http.GET();
+  int httpCode = httpResponseCode; // Declare httpCode here
   
   if (httpResponseCode == 200) {
     String response = http.getString();
@@ -951,26 +1030,6 @@ void verificarPagamento() {
           mostrarMenuInicial();
           mostrarInstrucoesSerial();
         }
-        else if (status == "cancelled" || status == "rejected") {
-          Serial.println("❌ Pagamento " + status);
-          
-          display.clearDisplay();
-          display.setCursor(0,0);
-          display.println("Pagamento");
-          display.println("cancelado/rejeitado");
-          display.println();
-          display.println("Voltando ao menu...");
-          display.display();
-          
-          delay(3000);
-          
-          paymentId = "";
-          qrCodeData = "";
-          valorDoacao = 0.0;
-          
-          mostrarMenuInicial();
-          mostrarInstrucoesSerial();
-        }
         else if (status == "pending") {
           Serial.println("⏳ Aguardando...");
         }
@@ -979,9 +1038,10 @@ void verificarPagamento() {
         }
       }
     }
-  } else {
-    Serial.println("❌ Erro HTTP: " + String(httpResponseCode));
-    if (httpResponseCode == -1) {
+  }
+  else {
+    Serial.println("❌ Erro HTTP: " + String(httpCode));
+    if (httpCode == -1) {
       Serial.println("Possível problema de conectividade");
     }
   }
@@ -1014,6 +1074,8 @@ bool exibirQRCodeReal() {
     const int DISPLAY_HEIGHT = 64;
     
     int pixelSize = std::min(DISPLAY_WIDTH / qr.getSize(), DISPLAY_HEIGHT / qr.getSize());
+    int qrDisplayWidth = qr.getSize() * pixelSize;
+    int qrDisplayHeight = qr.getSize() * pixelSize;
     
     if (pixelSize < 1) {
       Serial.println("❌ ERRO: QR Code muito grande para a tela");
@@ -1022,11 +1084,8 @@ bool exibirQRCodeReal() {
       return false;
     }
     
-    int qrDisplayWidth = qr.getSize() * pixelSize;
-    int qrDisplayHeight = qr.getSize() * pixelSize;
-    
     int startX = (DISPLAY_WIDTH - qrDisplayWidth) / 2;
-    int startY = (DISPLAY_HEIGHT - qrDisplayHeight) / 2;
+    int startY = (64 - qrDisplayHeight) / 2;
     
     Serial.println(" QR Code REAL na tela completa:");
     Serial.println("Tamanho do pixel: " + String(pixelSize) + " pixels");
