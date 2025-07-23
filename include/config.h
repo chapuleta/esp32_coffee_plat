@@ -2,12 +2,12 @@
 #define CONFIG_H
 
 // Wi-Fi Credentials
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
+#define WIFI_SSID "ILZAMAGDA"
+#define WIFI_PASSWORD "inventaumaai"
 
 // Firebase Project Credentials
-#define FIREBASE_HOST ""
-#define FIREBASE_AUTH ""
+#define FIREBASE_HOST "https://webcoffee-c8fdc-default-rtdb.firebaseio.com/"
+#define FIREBASE_AUTH "tq5yqXfqdMDIRyKZuxPRhgNBV4BVXCa43az3Qq2F"
 
 // OLED Display Configuration
 #define SCREEN_WIDTH 128
