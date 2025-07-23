@@ -1,0 +1,9 @@
+{
+  "name": "esp32-coffee-web",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "mercadopago": "^1.5.17",
+    "firebase-admin": "^12.0.0"
+  }
+}
