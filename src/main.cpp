@@ -1,57 +1,20 @@
 #include <Arduino.h>
-#include <Preferences.h>
 #include <WiFi.h>
+#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <qrcodegen.hpp>
+#include <Firebase_ESP_Client.h>
 #include "config.h"
-#include <WebServer.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
-#include <Wire.h>
-#include <SPI.h>
 
-// Estrutura para registro de doação
-struct RegistroDoacao {
-    String nome;
-    float valor;
-    String dataHora;
-};
+// Firebase objects
+FirebaseData stream;
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
 
-#define MAX_EXTRATO 50
-RegistroDoacao extratoDoacoes[MAX_EXTRATO];
-int numDoacoes = 0;
-
-// === GLOBAL VARIABLES ===
-Preferences preferences;
-float saldoConta = 0.0;
-String paymentId = "";
-String qrCodeData = "";
-
-enum MenuState {
-  MENU_INICIAL,
-  SELECIONAR_VALOR,
-  MOSTRAR_QR,
-  AGUARDAR_PAGAMENTO
-};
-MenuState estadoAtual = MENU_INICIAL;
-
-float valoresPredefinidos[] = {5.0, 10.0, 20.0, 50.0};
-int numValoresPredefinidos = sizeof(valoresPredefinidos) / sizeof(valoresPredefinidos[0]);
-int opcaoSelecionada = 0;
-float valorDoacao = 0.0;
-
-String ultimoContribuidor = "N/A";
-float ultimaContribuicao = 0.0;
-String maiorContribuidor = "N/A";
-float maiorContribuicao = 0.0;
-
-// Configurações da tela OLED
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-#define OLED_ADDRESS 0x3C
+// OLED Display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+<<<<<<< HEAD
 // Variáveis para o letreiro contínuo
 int x_ultimo_pos;
 int x_maior_pos;
@@ -64,16 +27,34 @@ unsigned long last_scroll_time = 0;
 // Variáveis para valor personalizado
 bool inserindoValorPersonalizado = false;
 String valorPersonalizadoStr = "";
+=======
+// Function to be called on data change
+void streamCallback(StreamData data) {
+    Serial.println("Stream data available...");
+    Serial.println(data.dataPath());
+    Serial.println(data.dataType());
+>>>>>>> af86e6a (teste firebase)
 
-// Variáveis para controle de teclas especiais
-String sequenciaEscape = "";
-bool lendoSequenciaEscape = false;
+    if (data.dataType() == "json") {
+        FirebaseJson &json = data.jsonObject();
+        String status;
+        FirebaseJsonData jsonData;
+        json.get(jsonData, "status");
+        if (jsonData.success) {
+            status = jsonData.stringValue;
+            if (status == "approved") {
+                Serial.println("Payment approved!");
 
-// Novas variáveis para fluxo de doação
-bool aguardandoTipoDoacao = false;
-bool doacaoAnonima = true;
-String nomeDoUsuario = "";
+                // Update Display
+                display.clearDisplay();
+                display.setTextSize(1);
+                display.setTextColor(SSD1306_WHITE);
+                display.setCursor(0, 0);
+                display.println("Pagamento Aprovado!");
+                display.println("Obrigado pelo seu cafe!");
+                display.display();
 
+<<<<<<< HEAD
 // ======= NOVO FLUXO: POLLING PARA NOME/VALOR DO RAILWAY =======
 String railwayNome = "";
 float railwayValor = 0.0;
@@ -196,62 +177,22 @@ void exibirQRCodeLink(String link) {
               if (screenX >= 0 && screenX < 128 && screenY >= 0 && screenY < 64) {
                 display.drawPixel(screenX, screenY, SSD1306_BLACK);
               }
+=======
+                // Clean up the firebase node to avoid reprocessing
+                if (Firebase.RTDB.setString(&fbdo, "/payment_status/status", "processed")) {
+                    Serial.println("Firebase status updated to processed.");
+                } else {
+                    Serial.println("Failed to update firebase status.");
+                    Serial.println(fbdo.errorReason());
+                }
+>>>>>>> af86e6a (teste firebase)
             }
-          }
         }
-      }
     }
-    display.display();
-    Serial.println("QR code de link exibido!");
-  } catch (const std::exception& e) {
-    Serial.println("Erro ao gerar QR code de link: " + String(e.what()));
-  }
-}
-
-// Endpoint para servir o formulário HTML
-void handleForm() {
-  String html = "<html><head><title>Doação com Nome</title></head><body>";
-  html += "<h2>Doação com Nome</h2>";
-  html += "<form method='POST' action='/doacao_nome'>";
-  html += "Nome: <input type='text' name='nome'><br>";
-  html += "Valor: <input type='number' step='0.01' name='valor'><br>";
-  html += "<input type='submit' value='Doar'>";
-  html += "</form></body></html>";
-  server.send(200, "text/html", html);
-}
-
-// Endpoint para receber o POST do formulário
-void handleDoacaoNome() {
-  String nome = server.hasArg("nome") ? server.arg("nome") : "";
-  float valor = server.hasArg("valor") ? server.arg("valor").toFloat() : 0.0;
-  receberDoacaoNome(nome, valor);
-  server.send(200, "text/html", "<html><body><h2>Obrigado pela doação!</h2></body></html>");
-}
-
-// Declarações das funções do web_server.cpp
-void handleRoot();
-void handleLogin();
-void handleSetSaldo();
-
-void startWebServer() {
-  // Rotas para doação
-  server.on("/form", handleForm);
-  server.on("/doacao_nome", HTTP_POST, handleDoacaoNome);
-
-  // Rotas para administração do saldo
-  server.on("/", handleRoot);
-  server.on("/login", HTTP_POST, handleLogin);
-  server.on("/set_saldo", HTTP_POST, handleSetSaldo);
-  
-  server.begin();
-  Serial.println("Servidor web iniciado!");
-}
-
-void handleWebServer() {
-  server.handleClient();
 }
 
 void setup() {
+<<<<<<< HEAD
   Serial.begin(115200);
   preferences.begin("doacoes", false);
   saldoConta = preferences.getFloat("saldo", 0.0);
@@ -274,24 +215,57 @@ void setup() {
   display.setCursor(0,0);
   display.println("Inicializando...");
   display.display();
+=======
+    Serial.begin(115200);
+>>>>>>> af86e6a (teste firebase)
 
-  // Conectar ao WiFi
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Conectando ao WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.println("WiFi conectado!");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+    // Initialize OLED display
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+        Serial.println(F("SSD1306 allocation failed"));
+        for(;;);
+    }
+    display.display();
+    delay(2000);
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Conectando ao WiFi...");
+    display.display();
 
-  // Iniciar servidor web SOMENTE após WiFi conectar
-  startWebServer();
+    // Connect to Wi-Fi
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println(" WiFi conectado.");
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("WiFi Conectado!");
+    display.display();
 
-  mostrarMenuInicial();
-  mostrarInstrucoesSerial();
+    // Configure Firebase
+    config.api_key = FIREBASE_AUTH; // Using API Key for authentication
+    config.database_url = FIREBASE_HOST;
+
+    // Assign the callback function for the stream
+    config.stream_callback = streamCallback;
+    config.stream_path = "/payment_status";
+
+    Firebase.begin(&config, &auth);
+    Firebase.reconnectWiFi(true);
+
+    // Start the stream
+    if (!Firebase.RTDB.beginStream(&stream, "/payment_status")) {
+        Serial.println("------------------------------------");
+        Serial.println("Can't begin stream connection...");
+        Serial.println("REASON: " + stream.errorReason());
+        Serial.println("------------------------------------");
+    }
+
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Aguardando doacoes...");
+    display.display();
 }
 
 void animarMenuInicial() {
@@ -349,6 +323,7 @@ void animarMenuInicial() {
 }
 
 void loop() {
+<<<<<<< HEAD
   if (estadoAtual == MENU_INICIAL) {
       animarMenuInicial();
   }
@@ -1156,4 +1131,9 @@ void receberDoacaoNome(String nome, float valor) {
 
 void verificarRailway() {
   // Função stub: implementar polling do endpoint Railway se necessário
+=======
+    // This is not required in the new architecture
+    // The magic happens in the stream callback
+    delay(1000); 
+>>>>>>> af86e6a (teste firebase)
 }

@@ -1,23 +1,17 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// Configurações WiFi - ALTERE AQUI
-#define WIFI_SSID "ILZAMAGDA"
-#define WIFI_PASSWORD "inventaumaai"
+// Wi-Fi Credentials
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
 
-// Token Mercado Pago
-#define MERCADO_PAGO_TOKEN "APP_USR-5426692687926122-070811-eab51cec3eee674658dab7096fb3ba16-113476843"
+// Firebase Project Credentials
+#define FIREBASE_HOST ""
+#define FIREBASE_AUTH ""
 
-// Pinos da tela OLED (padrão I2C)
-#define OLED_SDA 21
-#define OLED_SCL 22
-#define OLED_ADDRESS 0x3C
-
-// Valores pré-definidos para doação
-#define NUM_VALORES_PREDEFINIDOS 4
-
-// Configurações de tempo
-#define VERIFICACAO_PAGAMENTO_INTERVALO 5000  // 5 segundos
-#define TEMPO_CONFIRMACAO_TELA 5000           // 5 segundos
+// OLED Display Configuration
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
 
 #endif
