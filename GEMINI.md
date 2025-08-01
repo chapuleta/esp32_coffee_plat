@@ -17,13 +17,14 @@ nunca abra o monitor serial nem me peça pra abrir, da erro e trava o programa. 
 
 *   A lógica do webhook do Mercado Pago foi refatorada do `backend/index.js` para uma função serverless no Vercel: `web/api/mercadopago-webhook.js`.
 *   O diretório `backend/` foi removido.
-*   O projeto foi implantado no Vercel (URL de preview: `https://webhook-coffee-2gv4e97d1-joao-victor-ferreira-abreus-projects.vercel.app`).
-*   A URL correta para o webhook do Mercado Pago é `https://webhook-coffee-2gv4e97d1-joao-victor-ferreira-abreus-projects.vercel.app/api/mercadopago-webhook`.
+*   A `notification_url` em `web/api/create-payment.js` foi atualizada para apontar para `web/api/mercadopago-webhook.js`.
+*   O `web/api/webhook.js` foi removido.
+*   As credenciais do Firebase em `web/api/mercadopago-webhook.js` foram atualizadas para usar variáveis de ambiente.
 
 **Problemas Pendentes e Próximos Passos:**
 
 1.  **Erro 401 ao testar o Webhook no Mercado Pago:** Ao tentar simular uma notificação de webhook no painel do Mercado Pago, um erro 401 "Unauthorized" é retornado. Este erro parece vir do próprio ambiente de teste do Mercado Pago, indicando que ele não tem as credenciais para *enviar* a notificação de teste. **Ação:** Verificar a documentação do Mercado Pago sobre como testar webhooks e garantir que as credenciais de API (Public Key e Access Token) estejam configuradas no painel do Mercado Pago para fins de teste.
 
-2.  **Erro ao criar pagamento (`create-payment.js`):** A função `create-payment.js` está falhando com a mensagem "You must provide a method of authentication (client_id & client_secret or access_token)". **Ação:** Configurar as credenciais do Mercado Pago (`MERCADOPAGO_PUBLIC_KEY` e `MERCADOPAGO_ACCESS_TOKEN`) como variáveis de ambiente no Vercel para o projeto e atualizar `web/api/create-payment.js` para usá-las (`process.env.MERCADOPAGO_ACCESS_TOKEN`).
+2.  **Erro `FUNCTION_INVOCATION_FAILED` em `mercadopago-webhook.js`:** O log indica `TypeError: Cannot read properties of undefined (reading 'replace')` na linha 9:58. Isso ocorre porque as variáveis de ambiente do Firebase (especificamente `FIREBASE_PRIVATE_KEY`) não estão configuradas no Vercel para essa função. **Ação:** Configurar as variáveis de ambiente do Firebase (`FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_DATABASE_URL`) no Vercel.
 
-**Prioridade:** Resolver o problema do erro 401 no teste do webhook do Mercado Pago primeiro, para garantir que as notificações cheguem à função Vercel.
+**Prioridade:** Configurar as variáveis de ambiente do Firebase no Vercel para resolver o `FUNCTION_INVOCATION_FAILED`.
