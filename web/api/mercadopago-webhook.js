@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
   console.log('Corpo da requisição:', req.body);
 
   const paymentId = req.body.data?.id;
-  const topic = req.body.topic;
+  const topic = req.body.type;
 
   if (topic === 'payment' && paymentId) {
     try {
