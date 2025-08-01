@@ -26,13 +26,20 @@ document.getElementById('generate-btn').addEventListener('click', async () => {
 
         const data = await response.json();
 
-        if (data.qr_data) {
+        if (data.qr_code_base64) {
             const img = document.createElement('img');
-            img.src = `data:image/png;base64,${data.qr_data}`;
+            img.src = `data:image/png;base64,${data.qr_code_base64}`;
             qrcodeEl.appendChild(img);
-            statusEl.textContent = 'Escaneie o QR Code para pagar.';
+
+            if (data.qr_code) {
+                const pixCopyPaste = document.createElement('p');
+                pixCopyPaste.textContent = `Pix Copia e Cola: ${data.qr_code}`;
+                qrcodeEl.appendChild(pixCopyPaste);
+            }
+
+            statusEl.textContent = 'Escaneie o QR Code ou use o Pix Copia e Cola para pagar.';
         } else {
-            throw new Error('Resposta inválida do servidor.');
+            throw new Error('Resposta inválida do servidor: QR Code não recebido.');
         }
     } catch (error) {
         console.error('Erro:', error);
