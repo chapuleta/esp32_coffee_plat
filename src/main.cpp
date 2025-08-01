@@ -1,5 +1,5 @@
 #define ENABLE_DATABASE
-#define ENABLE_LEGACY_TOKEN
+#define ENABLE_USER_AUTH
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -34,7 +34,7 @@ WiFiClientSecure *ssl_client = nullptr;
 AsyncClientClass *aClient = nullptr;
 FirebaseApp app;
 RealtimeDatabase Database;
-LegacyToken *legacy_token = nullptr;
+UserAuth *user_auth = nullptr;
 
 // Display OLED
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -60,6 +60,8 @@ void printOLED(const String& message, int textSize, bool clear) {
   display.display();
 }
 
+#include <ArduinoJson.h>
+
 // --- Firebase Functions ---
 
 void streamCallback(AsyncResult &aResult) {
@@ -72,16 +74,28 @@ void streamCallback(AsyncResult &aResult) {
 
     if (aResult.available()) {
         RealtimeDatabaseResult &stream = aResult.to<RealtimeDatabaseResult>();
-        if (stream.isStream() && stream.dataPath() == "/status") {
-            String status = stream.to<String>();
-            if (status == "approved") {
-                Serial.println("Donation approved! Processing...");
-                printOLED("Obrigado!", 2);
-                delay(2000);
-                printOLED("Aguardando...", 1);
-                if (aClient) {
-                    Database.set<String>(*aClient, "/payment_status/status", "processed");
+        Serial.printf("Stream Data Path: %s\n", stream.dataPath().c_str());
+        Serial.printf("Stream Value: %s\n", stream.to<String>().c_str());
+        Serial.printf("Is Stream: %s\n", stream.isStream() ? "true" : "false");
+        Serial.printf("Stream Type: %d\n", stream.type());
+        if (stream.isStream() && stream.dataPath() == "/") {
+            StaticJsonDocument<200> doc; // Adjust size as needed
+            DeserializationError error = deserializeJson(doc, stream.to<String>());
+
+            if (!error) {
+                String status = doc["status"].as<String>();
+                if (status == "approved") {
+                    Serial.println("Donation approved! Processing...");
+                    printOLED("Obrigado!", 2);
+                    delay(2000);
+                    printOLED("Aguardando...", 1);
+                    if (aClient) {
+                        Database.set<String>(*aClient, "/payment_status/status", "processed");
+                    }
                 }
+            } else {
+                Serial.print(F("deserializeJson() failed: "));
+                Serial.println(error.f_str());
             }
         }
     }
@@ -95,9 +109,9 @@ void setupFirebase() {
   
   aClient = new AsyncClientClass(*ssl_client);
   
-  legacy_token = new LegacyToken(FIREBASE_AUTH);
+  user_auth = new UserAuth(FIREBASE_API_KEY, FIREBASE_USER_EMAIL, FIREBASE_USER_PASSWORD);
 
-  initializeApp(*aClient, app, getAuth(*legacy_token), streamCallback, "authTask");
+  initializeApp(*aClient, app, getAuth(*user_auth), streamCallback, "authTask");
   
   app.getApp<RealtimeDatabase>(Database);
   Database.url(FIREBASE_HOST);
