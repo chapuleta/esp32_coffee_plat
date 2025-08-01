@@ -2,7 +2,7 @@ const mercadopago = require('mercadopago');
 
 // Configure o Mercado Pago com seu Access Token
 mercadopago.configure({
-    access_token: process.env.MERCADO_PAGO_TOKEN,
+    access_token: process.env.MERCADOPAGO_ACCESS_TOKEN,
 });
 
 module.exports = async (req, res) => {
@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
             ],
             installments: 1
         },
-        notification_url: `${baseUrl}/api/webhook`,
+        notification_url: `${baseUrl}/api/mercadopago-webhook`,
         binary_mode: true,
     };
 
