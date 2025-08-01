@@ -23,8 +23,10 @@ nunca abra o monitor serial nem me peça pra abrir, da erro e trava o programa. 
 
 **Problemas Pendentes e Próximos Passos:**
 
-1.  **Erro 401 ao testar o Webhook no Mercado Pago:** Ao tentar simular uma notificação de webhook no painel do Mercado Pago, um erro 401 "Unauthorized" é retornado. Este erro parece vir do próprio ambiente de teste do Mercado Pago, indicando que ele não tem as credenciais para *enviar* a notificação de teste. **Ação:** Verificar a documentação do Mercado Pago sobre como testar webhooks e garantir que as credenciais de API (Public Key e Access Token) estejam configuradas no painel do Mercado Pago para fins de teste.
+*   **Webhook do Mercado Pago funcionando:** O webhook agora está recebendo e processando as notificações do Mercado Pago corretamente, atualizando o Firebase.
+*   **Erro ao criar pagamento (`create-payment.js`):** O log indica `TypeError: Cannot read properties of undefined (reading 'transaction_data')`. Isso ocorre porque a resposta do Mercado Pago não contém a estrutura `response.body.point_of_interaction.transaction_data` que o código espera, pois a função foi alterada para criar um pagamento Pix diretamente.
 
-2.  **Erro `FUNCTION_INVOCATION_FAILED` em `mercadopago-webhook.js`:** O log indica `TypeError: Cannot read properties of undefined (reading 'replace')` na linha 9:58. Isso ocorre porque as variáveis de ambiente do Firebase (especificamente `FIREBASE_PRIVATE_KEY`) não estão configuradas no Vercel para essa função. **Ação:** Configurar as variáveis de ambiente do Firebase (`FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_DATABASE_URL`) no Vercel.
+**Próximos Passos:**
 
-**Prioridade:** Configurar as variáveis de ambiente do Firebase no Vercel para resolver o `FUNCTION_INVOCATION_FAILED`.
+1.  **Testar criação de pagamentos:** Verifique se a função `create-payment.js` está funcionando corretamente após a alteração para criar um pagamento Pix diretamente.
+2.  **Verificar o erro 401 no painel de testes do Mercado Pago:** Se o erro 401 "Unauthorized" ainda ocorrer ao *simular* o webhook no painel do Mercado Pago, isso indica um problema nas credenciais ou configuração do *ambiente de teste do Mercado Pago*, e não no seu webhook. Nesse caso, será necessário verificar as configurações de teste diretamente no painel do Mercado Pago.
