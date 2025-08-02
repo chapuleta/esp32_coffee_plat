@@ -1,10 +1,19 @@
 document.getElementById('generate-btn').addEventListener('click', async () => {
     const amount = parseFloat(document.getElementById('amount').value);
+    const fname = document.getElementById('fname').value;
+    const lname = document.getElementById('lname').value;
+    const email = document.getElementById('email').value;
+    const cpf = document.getElementById('cpf').value;
     const statusEl = document.getElementById('status');
     const qrcodeEl = document.getElementById('qrcode');
 
     if (isNaN(amount) || amount <= 0) {
         statusEl.textContent = 'Por favor, insira um valor válido.';
+        return;
+    }
+
+    if (!fname || !lname || !email || !cpf) {
+        statusEl.textContent = 'Por favor, preencha todos os campos.';
         return;
     }
 
@@ -17,7 +26,13 @@ document.getElementById('generate-btn').addEventListener('click', async () => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ amount: amount }),
+            body: JSON.stringify({ 
+                amount: amount,
+                fname: fname,
+                lname: lname,
+                email: email,
+                cpf: cpf
+            }),
         });
 
         if (!response.ok) {

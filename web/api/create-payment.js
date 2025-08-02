@@ -11,10 +11,14 @@ module.exports = async (req, res) => {
         return res.status(405).send('Method Not Allowed');
     }
 
-    const { amount } = req.body;
+    const { amount, fname, lname, email, cpf } = req.body;
 
     if (!amount || typeof amount !== 'number' || amount <= 0) {
         return res.status(400).json({ error: 'Valor inválido.' });
+    }
+
+    if (!fname || !lname || !email || !cpf) {
+        return res.status(400).json({ error: 'Dados do pagador incompletos.' });
     }
 
     // A URL base do seu projeto na Vercel, vinda de uma variável de ambiente
@@ -25,12 +29,12 @@ module.exports = async (req, res) => {
         description: 'Café',
         payment_method_id: 'pix',
         payer: {
-            email: 'test_user@example.com', // Substitua por um email de teste válido
-            first_name: 'Test',
-            last_name: 'User',
+            email: email,
+            first_name: fname,
+            last_name: lname,
             identification: {
                 type: 'CPF',
-                number: '11111111111', // Use um CPF de teste válido se possível
+                number: cpf,
             },
         },
         notification_url: `${baseUrl}/api/mercadopago-webhook`,

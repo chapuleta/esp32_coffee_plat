@@ -4,7 +4,7 @@ veja os exemplos da bibilioteca que está em C:\Users\victo\OneDrive\Documentos\
 
 de forma alguma volte pra biblioteca antiga, que está deprecada.
 
-lembre-se que, por estamos no ambiente do platformio dentro do vscode, as funções precisam ser desclaradas antes de serem usadas.
+lembre-se que, por estamos no ambiente do platformio dentro do vscode, as funções precisam ser declaradas antes de serem usadas.
 
 aqui está um código de exemplo pra vc ter ideia de como usar a biblioteca e implementar as funcionalidades:
 C:\Users\victo\OneDrive\Documentos\PlatformIO\Projects\esp32_coffee_plat\exemplo.md
@@ -29,3 +29,26 @@ nunca abra o monitor serial nem me peça pra abrir, da erro e trava o programa. 
 
 1.  **Testar novamente com pagamentos reais:** Faça um novo deploy no Vercel e teste com um pagamento real para verificar se as notificações de webhook agora estão sendo recebidas.
 2.  **Contatar o suporte do Mercado Pago (se o problema persistir):** Se as notificações de pagamentos reais ainda não chegarem após a adição da `X-Idempotency-Key`, será necessário contatar o suporte do Mercado Pago. Forneça a URL do webhook, o access_token, IDs de pagamentos reais que não geraram notificações e logs do Vercel que mostram o webhook funcionando com o simulador. Eles precisam investigar por que as notificações de produção não estão sendo enviadas.
+---
+
+**Progresso Recente (01/08/2025 - Continuação):**
+
+*   **Remoção de Credenciais Vazadas:**
+    *   Identificadas credenciais do Firebase (API Key, e-mail, senha) vazadas em `esp32_coffee_plat-a7700f272fbafffbba4002a2833bb641216789a0/include/config.h`.
+    *   Identificado token do Mercado Pago vazado em `temp_mercadopago_test.ps1`.
+    *   Utilizado `git filter-repo` para remover `esp32_coffee_plat-a7700f272fbafffbba4002a2833bb641216789a0/include/config.h` e `temp_mercadopago_test.ps1` de todo o histórico do Git.
+    *   `temp_mercadopago_test.ps1` adicionado ao `.gitignore`.
+    *   Remoto `origin` reconfigurado e `git push origin --force --all` executado para atualizar o repositório remoto.
+    *   **Ações de Segurança Críticas Recomendadas:**
+        *   Revogar/rotacionar a chave da API do Firebase e alterar a senha do usuário do Firebase.
+        *   Mudar a senha da conta Google associada ao e-mail exposto e ativar a verificação em duas etapas (2FA).
+        *   Revogar o token do Mercado Pago exposto.
+        *   Verificar logs de segurança no Firebase e na conta Google.
+    *   **Diferenciação de Credenciais:** Esclarecido que as credenciais do `config.h` são para o ESP32 (local, não versionado) e as variáveis de ambiente no Vercel são para o backend.
+
+
+
+
+    em C:\Users\victo\OneDrive\Documentos\PlatformIO\Projects\esp32_coffee_plat\esp32_coffee_plat-a7700f272fbafffbba4002a2833bb641216789a0
+    tem um projeto antigo, mas que, na verdade é o projeto real.
+    explico: meu projeto antigo tinha algumas limitações, como: eu não conseguia usar port foward no esp32 por causa de limitações da minha provedora de internnet, então, tinha que usar o ngrok pra deixar um endereço aberto onde hospedava o formulario onde o usuario digitava seu nome e o valor da doação. Como eu queria eliminar a necessidade de um computador a mais no projeto, o próprio gemini me sugeriu o firebase. A partir dai, abri um novo projeto pra aprender o básico da implementação do firebase. A ideia é voltar pra esse meu código, agora com o firebase no lugar do ngrok.
