@@ -33,10 +33,7 @@ module.exports = async (req, res) => {
 
     if (topic === 'payment' && paymentId) {
         try {
-            // Responde imediatamente ao Mercado Pago para confirmar o recebimento
-            res.status(200).send('Webhook recebido.');
-
-            // Busca os detalhes do pagamento no Mercado Pago
+            // Busca os detalhes do pagamento no Mercado Pago PRIMEIRO
             console.log(`Consultando pagamento ${paymentId} no Mercado Pago...`);
             const payment = await mercadopago.payment.findById(paymentId);
             const statusFromMercadoPago = payment.body.status;
@@ -45,21 +42,23 @@ module.exports = async (req, res) => {
 
             if (statusFromMercadoPago === 'approved') {
                 console.log(`Pagamento ${paymentId} aprovado! Atualizando Firebase...`);
-
                 const paymentStatusRef = db.ref('payment_status/status');
                 await paymentStatusRef.set('approved');
-
                 console.log('Firebase atualizado para "approved".');
             } else {
                 console.log(`Pagamento ${paymentId} com status: ${statusFromMercadoPago}. Nenhuma ação no Firebase.`);
             }
 
+            // DEPOIS de todo o trabalho, responde ao Mercado Pago
+            return res.status(200).send('Webhook processado com sucesso.');
+
         } catch (error) {
-            console.error('Erro ao processar webhook ou atualizar Firebase:', error);
-            // Não envie um status 500 aqui, pois a resposta inicial já foi enviada.
+            console.error('Erro ao processar webhook:', error);
+            // Se der erro, avisa o Mercado Pago que algo falhou.
+            return res.status(500).send('Erro interno ao processar webhook.');
         }
     } else {
         console.log('Notificação de webhook não relevante ou inválida.');
-        res.status(400).send('Requisição inválida.');
+        return res.status(400).send('Requisição inválida.');
     }
 };
