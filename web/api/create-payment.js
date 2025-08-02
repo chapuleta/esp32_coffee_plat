@@ -1,4 +1,5 @@
 const mercadopago = require('mercadopago');
+const { v4: uuidv4 } = require('uuid');
 
 // Configure o Mercado Pago com seu Access Token
 mercadopago.configure({
@@ -30,7 +31,11 @@ module.exports = async (req, res) => {
     };
 
     try {
-        const response = await mercadopago.payment.create(paymentData);
+        const idempotencyKey = uuidv4();
+        const requestOptions = {
+            idempotencyKey: idempotencyKey
+        };
+        const response = await mercadopago.payment.create(paymentData, requestOptions);
         const qr_code_base64 = response.body.point_of_interaction.transaction_data.qr_code_base64;
         const qr_code = response.body.point_of_interaction.transaction_data.qr_code;
         

@@ -23,10 +23,9 @@ nunca abra o monitor serial nem me peça pra abrir, da erro e trava o programa. 
 
 **Problemas Pendentes e Próximos Passos:**
 
-*   **Webhook do Mercado Pago funcionando:** O webhook agora está recebendo e processando as notificações do Mercado Pago corretamente, atualizando o Firebase.
-*   **Erro ao criar pagamento (`create-payment.js`):** O log indica `TypeError: Cannot read properties of undefined (reading 'transaction_data')`. Isso ocorre porque a resposta do Mercado Pago não contém a estrutura `response.body.point_of_interaction.transaction_data` que o código espera, pois a função foi alterada para criar um pagamento Pix diretamente.
+*   **Notificações de pagamentos reais não chegam ao webhook:** Apesar de todas as configurações estarem em produção (access_token e webhook no Mercado Pago) e o webhook funcionar com o simulador do Mercado Pago, as notificações de pagamentos reais não estão sendo recebidas. Isso indica um problema do lado do Mercado Pago. A `X-Idempotency-Key` foi adicionada à criação de pagamentos, o que pode resolver o problema.
 
 **Próximos Passos:**
 
-1.  **Testar criação de pagamentos:** Verifique se a função `create-payment.js` está funcionando corretamente após a alteração para criar um pagamento Pix diretamente.
-2.  **Verificar o erro 401 no painel de testes do Mercado Pago:** Se o erro 401 "Unauthorized" ainda ocorrer ao *simular* o webhook no painel do Mercado Pago, isso indica um problema nas credenciais ou configuração do *ambiente de teste do Mercado Pago*, e não no seu webhook. Nesse caso, será necessário verificar as configurações de teste diretamente no painel do Mercado Pago.
+1.  **Testar novamente com pagamentos reais:** Faça um novo deploy no Vercel e teste com um pagamento real para verificar se as notificações de webhook agora estão sendo recebidas.
+2.  **Contatar o suporte do Mercado Pago (se o problema persistir):** Se as notificações de pagamentos reais ainda não chegarem após a adição da `X-Idempotency-Key`, será necessário contatar o suporte do Mercado Pago. Forneça a URL do webhook, o access_token, IDs de pagamentos reais que não geraram notificações e logs do Vercel que mostram o webhook funcionando com o simulador. Eles precisam investigar por que as notificações de produção não estão sendo enviadas.
