@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
             last_name: lname,
             identification: {
                 type: 'CPF',
-                number: cpf,
+                number: cpf.replace(/\D/g, ''), // Garante que apenas dígitos sejam enviados
             },
         },
         notification_url: `${baseUrl}/api/mercadopago-webhook`,
