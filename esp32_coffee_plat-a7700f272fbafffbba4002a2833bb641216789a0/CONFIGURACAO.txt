@@ -1,0 +1,15 @@
+/**
+ * INSTRUÇÕES DE CONFIGURAÇÃO
+ * 
+ * Antes de usar o sistema, você DEVE alterar as seguintes configurações:
+ * 
+ * 1. EDITE o arquivo include/config.h
+ * 2. SUBSTITUA "SEU_WIFI_SSID" pelo nome da sua rede WiFi
+ * 3. SUBSTITUA "SUA_SENHA_WIFI" pela senha da sua rede WiFi
+ * 
+ * Exemplo:
+ * #define WIFI_SSID "MinhaRedeWiFi"
+ * #define WIFI_PASSWORD "minhaSenha123"
+ * 
+ * O token do Mercado Pago já está configurado corretamente.
+ */
