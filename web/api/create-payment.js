@@ -40,6 +40,8 @@ module.exports = async (req, res) => {
         notification_url: `${baseUrl}/api/mercadopago-webhook`,
     };
 
+    console.log("Enviando notification_url:", paymentData.notification_url);
+
     try {
         const idempotencyKey = uuidv4();
         const requestOptions = {
