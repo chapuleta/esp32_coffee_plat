@@ -26,6 +26,12 @@ module.exports = async (req, res) => {
         payment_method_id: 'pix',
         payer: {
             email: 'test_user@example.com', // Substitua por um email de teste válido
+            first_name: 'Test',
+            last_name: 'User',
+            identification: {
+                type: 'CPF',
+                number: '11111111111', // Use um CPF de teste válido se possível
+            },
         },
         notification_url: `${baseUrl}/api/mercadopago-webhook`,
     };

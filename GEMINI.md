@@ -23,7 +23,7 @@ nunca abra o monitor serial nem me peça pra abrir, da erro e trava o programa. 
 
 **Problemas Pendentes e Próximos Passos:**
 
-*   **Notificações de pagamentos reais não chegam ao webhook:** Apesar de todas as configurações estarem em produção (access_token e webhook no Mercado Pago) e o webhook funcionar com o simulador do Mercado Pago, as notificações de pagamentos reais não estão sendo recebidas. Isso indica um problema do lado do Mercado Pago. A `X-Idempotency-Key` foi adicionada à criação de pagamentos, o que pode resolver o problema.
+*   **Notificações de pagamentos reais não chegam ao webhook:** Apesar de todas as configurações estarem em produção (access_token e webhook no Mercado Pago) e o webhook funcionar com o simulador do Mercado Pago, as notificações de pagamentos reais não estão sendo recebidas. Isso indica um problema do lado do Mercado Pago. A `X-Idempotency-Key` e detalhes adicionais do pagador foram adicionados à criação de pagamentos, o que pode resolver o problema.
 
 **Próximos Passos:**
 
