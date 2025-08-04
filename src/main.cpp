@@ -78,24 +78,51 @@ void streamCallback(AsyncResult &aResult) {
         Serial.printf("Stream Value: %s\n", stream.to<String>().c_str());
         Serial.printf("Is Stream: %s\n", stream.isStream() ? "true" : "false");
         Serial.printf("Stream Type: %d\n", stream.type());
-        if (stream.isStream() && stream.dataPath() == "/") {
-            StaticJsonDocument<200> doc; // Adjust size as needed
-            DeserializationError error = deserializeJson(doc, stream.to<String>());
-
-            if (!error) {
-                String status = doc["status"].as<String>();
-                if (status == "approved") {
-                    Serial.println("Donation approved! Processing...");
-                    printOLED("Obrigado!", 2);
-                    delay(2000);
-                    printOLED("Aguardando...", 1);
-                    if (aClient) {
-                        Database.set<String>(*aClient, "/payment_status/status", "processed");
-                    }
+        
+        // Processa tanto mudanças no path raiz "/" quanto em "/status"
+        if (stream.isStream() && (stream.dataPath() == "/" || stream.dataPath() == "/status")) {
+            String dataValue = stream.to<String>();
+            String status = "";
+            
+            // Se o path é "/status", o valor direto é o status
+            if (stream.dataPath() == "/status") {
+                status = dataValue;
+                status.replace("\"", ""); // Remove aspas se existirem
+                Serial.printf("Status direto recebido: %s\n", status.c_str());
+            } 
+            // Se o path é "/", precisa fazer parse JSON
+            else if (stream.dataPath() == "/") {
+                StaticJsonDocument<200> doc;
+                DeserializationError error = deserializeJson(doc, dataValue);
+                
+                if (!error) {
+                    status = doc["status"].as<String>();
+                    Serial.printf("Status extraído do JSON: %s\n", status.c_str());
+                } else {
+                    Serial.printf("Erro no JSON parse: %s\n", error.f_str());
+                    return;
                 }
-            } else {
-                Serial.print(F("deserializeJson() failed: "));
-                Serial.println(error.f_str());
+            }
+            
+            // Processa o status aprovado
+            if (status == "approved") {
+                Serial.println("Donation approved! Processing...");
+                printOLED("Obrigado!", 2);
+                delay(2000);
+                printOLED("Aguardando...", 1);
+                
+                if (aClient) {
+                    Serial.println("Atualizando status para 'processed'...");
+                    Database.set<String>(*aClient, "/payment_status/status", "processed");
+                    
+                    // CRÍTICO: Reinicia o stream para escutar próximos pagamentos
+                    Serial.println("Reiniciando stream para próximos pagamentos...");
+                    delay(1000); // Pequena pausa para garantir que a atualização foi enviada
+                    Database.get(*aClient, "/payment_status", streamCallback, true, "streamTask");
+                }
+            }
+            else if (status == "processed") {
+                Serial.println("Status já processado, aguardando próximo pagamento...");
             }
         }
     }
@@ -111,12 +138,23 @@ void setupFirebase() {
   
   user_auth = new UserAuth(FIREBASE_API_KEY, FIREBASE_USER_EMAIL, FIREBASE_USER_PASSWORD);
 
+  Serial.println("Inicializando Firebase App...");
   initializeApp(*aClient, app, getAuth(*user_auth), streamCallback, "authTask");
   
+  Serial.println("Configurando Realtime Database...");
   app.getApp<RealtimeDatabase>(Database);
   Database.url(FIREBASE_HOST);
 
+  // Primeiro, reseta o status para garantir estado limpo
+  Serial.println("Resetando status para estado inicial...");
+  Database.set<String>(*aClient, "/payment_status/status", "waiting");
+  
+  delay(2000); // Aguarda a escrita ser processada
+  
+  Serial.println("Iniciando stream de monitoramento...");
   Database.get(*aClient, "/payment_status", streamCallback, true, "streamTask");
+  
+  Serial.println("Firebase configurado com sucesso!");
 }
 
 // --- Web Server Functions ---
