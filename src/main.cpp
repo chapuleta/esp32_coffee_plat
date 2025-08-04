@@ -311,7 +311,7 @@ void streamCallback(AsyncResult &aResult) {
             // Processa o status aprovado
             if (status == "approved") {
                 Serial.println("Donation approved! Processing...");
-                printOLED("Obrigado!", 2);
+                printOLED("Obrigado!", 2, true);
                 delay(2000);
                 displayInfo(); // Usa nova função em vez de printOLED
                 
@@ -429,7 +429,7 @@ void setup() {
     Serial.println(F("Falha na alocacao do SSD1306"));
     for (;;);
   }
-  printOLED("Conectando...", 1);
+  printOLED("Conectando...", 1, true);
 
   // Connect to Wi-Fi
   Serial.print("Conectando ao Wi-Fi...");
@@ -441,7 +441,7 @@ void setup() {
   Serial.println("\nWi-Fi conectado.");
   Serial.print("Endereco IP: ");
   Serial.println(WiFi.localIP());
-  printOLED(WiFi.localIP().toString(), 1);
+  printOLED(WiFi.localIP().toString(), 1, true);
   delay(2000);
 
   // Sync Time
