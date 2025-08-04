@@ -423,7 +423,6 @@ void setup() {
   Serial.begin(115200);
   preferences.begin("coffee-app", false);
 
-  // Connect to Wi-Fi
   // Init OLED
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("Falha na alocacao do SSD1306"));
@@ -453,20 +452,10 @@ void setup() {
   Serial.println("Hora sincronizada.");
   Serial.println(timeClient.getFormattedTime());
 
-  displayInfo(); // Mostra informações iniciais
+  printOLED("Carregando dados...", 1, true);
 
   // Start Services
   setupFirebase();
-  
-  // TEMPORÁRIO: Usar dados fixos para testar o display
-  Serial.println("� USANDO DADOS FIXOS PARA TESTE DO DISPLAY");
-  totalAmount = "45.50";
-  lastDonor = "João Silva";
-  topDonor = "Maria Santos";
-  
-  displayInfo(); // Atualiza display com dados fixos
-  Serial.println("✅ Display atualizado com dados fixos!");
-  
   startWebServer();
 }
 
