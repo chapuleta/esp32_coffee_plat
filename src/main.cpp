@@ -452,8 +452,6 @@ void setup() {
   Serial.println("Hora sincronizada.");
   Serial.println(timeClient.getFormattedTime());
 
-  printOLED("Carregando dados...", 1, true);
-
   // Start Services
   setupFirebase();
   startWebServer();
