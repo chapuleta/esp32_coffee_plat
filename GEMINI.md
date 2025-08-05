@@ -53,6 +53,77 @@ Sistema ativo
 - **Segurança implementada:** Credenciais em variáveis ambiente Vercel
 - **Performance:** Sistema processa múltiplos pagamentos sem reset manual
 
+## PRÓXIMA IMPLEMENTAÇÃO - SALDO REAL DO MERCADO PAGO
+
+### ✅ NOVA FUNCIONALIDADE IMPLEMENTADA - Consulta Saldo Real MP:
+
+**PROBLEMA IDENTIFICADO:** O sistema estava somando doações manualmente em vez de usar o saldo real da conta Mercado Pago.
+
+**SOLUÇÃO IMPLEMENTADA:**
+- Nova função `fetchMercadoPagoBalance()` que consulta o saldo real via API
+- Integração com `balance_summary` endpoint do Mercado Pago
+- Atualização automática a cada 10 segundos junto com verificação de dados
+- Sincronização bidirecional: MP → Firebase → ESP32 → Display
+
+### Implementação Técnica:
+
+**1. API Endpoint Utilizada:**
+```
+GET https://api.mercadopago.com/v1/account/balance_summary
+Authorization: Bearer ACCESS_TOKEN
+```
+
+**2. Nova Função Adicionada:**
+```cpp
+void fetchMercadoPagoBalance() {
+  // Conecta com API do Mercado Pago
+  // Consulta saldo disponível na conta
+  // Compara com valor atual
+  // Atualiza Firebase e display se houver mudança
+}
+```
+
+**3. Configuração Necessária:**
+Adicionar no `include/config.h`:
+```cpp
+#define MERCADOPAGO_ACCESS_TOKEN "SEU_ACCESS_TOKEN_AQUI"
+```
+
+**4. Fluxo de Funcionamento:**
+1. A cada 10 segundos o ESP32 consulta a API do MP
+2. Compara saldo atual com valor em `totalAmount`
+3. Se diferente, atualiza Firebase com saldo real
+4. Display é atualizado automaticamente
+5. Serial monitor mostra logs da operação
+
+### Como Obter o Access Token:
+
+**1. Acesse:** https://www.mercadopago.com.br/developers/
+**2. Vá em:** Suas aplicações → Sua aplicação → Credenciais
+**3. Copie:** Access Token de Produção (ou Sandbox para testes)
+**4. Substitua** `SEU_ACCESS_TOKEN_AQUI` no config.h
+
+### Vantagens da Implementação:
+
+✅ **Saldo Real:** Mostra exatamente o que tem na conta MP
+✅ **Automático:** Atualiza sozinho sem intervenção manual  
+✅ **Confiável:** Dados direto da fonte oficial
+✅ **Compatível:** Mantém webhook para "Obrigado!" imediato
+✅ **Sincronizado:** Firebase sempre atualizado com saldo real
+
+### Status Atual:
+- **Código:** ✅ Implementado e compilado com sucesso
+- **Configuração:** ⚠️ Necessário adicionar Access Token real
+- **Teste:** 📋 Pendente upload e verificação
+
+### Logs Esperados:
+```
+💳 Consultando saldo real do Mercado Pago...
+💰 Saldo MP atualizado: R$ 0.00 -> R$ 127.50
+🔄 Verificando atualizações nos dados de doações...
+✅ Saldo MP inalterado: R$ 127.50
+```
+
 ## PRÓXIMA IMPLEMENTAÇÃO - FASE 2 OBRIGATÓRIA
 
 ### IMPORTANTE: Fase 1 implementada e funcionando
