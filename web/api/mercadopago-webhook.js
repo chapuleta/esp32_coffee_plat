@@ -105,12 +105,14 @@ module.exports = async (req, res) => {
         return res.status(405).send('Method Not Allowed');
     }
 
-    const paymentId = req.body.data?.id;
-    const topic = req.body.type;
+    // Extrai payment ID de diferentes formatos do webhook
+    let paymentId = req.body.data?.id || req.body.resource || req.query.id;
+    const topic = req.body.type || req.body.topic;
     
     console.log(`🔍 Extraído da requisição:`);
     console.log(`   - Topic: ${topic}`);
     console.log(`   - Payment ID: ${paymentId}`);
+    console.log(`   - Body completo:`, JSON.stringify(req.body, null, 2));
 
     if (topic === 'payment' && paymentId) {
         try {

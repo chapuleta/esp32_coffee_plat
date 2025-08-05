@@ -13,15 +13,27 @@
         
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh; 
             margin: 0; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 15px;
             line-height: 1.6;
+        }
+        
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 25px;
+            align-items: start;
+        }
+        
+        @media (max-width: 968px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                max-width: 500px;
+            }
         }
         
         .container { 
@@ -30,7 +42,6 @@
             background-color: white; 
             border-radius: 16px; 
             box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            max-width: 500px;
             width: 100%;
             position: relative;
             overflow: hidden;
@@ -67,6 +78,236 @@
             font-size: clamp(14px, 3.5vw, 18px);
             font-weight: 400;
         }
+        
+        /* Seção do Saldo - Simplificada */
+        .balance-section {
+            margin: 25px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 16px;
+            border: 2px solid #dee2e6;
+        }
+        
+        .balance-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .balance-icon {
+            font-size: clamp(28px, 7vw, 36px);
+            width: clamp(60px, 15vw, 70px);
+            height: clamp(60px, 15vw, 70px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .balance-info {
+            text-align: center;
+        }
+        
+        .balance-label {
+            font-size: clamp(14px, 3.5vw, 16px);
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .balance-amount {
+            font-size: clamp(24px, 8vw, 32px);
+            font-weight: 700;
+            color: #27ae60;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        /* Histórico de Doações */
+        .history-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            padding: clamp(20px, 5vw, 25px);
+            height: fit-content;
+            max-height: 80vh;
+            overflow: hidden;
+        }
+        
+        .history-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f1f3f4;
+        }
+        
+        .history-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            border-radius: 50%;
+            color: white;
+        }
+        
+        .history-title {
+            font-size: clamp(16px, 4vw, 20px);
+            font-weight: 700;
+            color: #2c3e50;
+            margin: 0;
+        }
+        
+        .history-list {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #27ae60;
+            transition: all 0.3s ease;
+        }
+        
+        .history-item:hover {
+            background: #e9ecef;
+            transform: translateX(3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .history-info {
+            flex: 1;
+        }
+        
+        .history-donor {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: clamp(13px, 3vw, 15px);
+            margin-bottom: 2px;
+        }
+        
+        .history-time {
+            font-size: clamp(11px, 2.5vw, 13px);
+            color: #7f8c8d;
+        }
+        
+        .history-amount {
+            font-weight: 700;
+            color: #27ae60;
+            font-size: clamp(13px, 3vw, 15px);
+        }
+        
+        .empty-history {
+            text-align: center;
+            padding: 40px 20px;
+            color: #7f8c8d;
+        }
+        
+        .empty-history-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        /* Scrollbar customizada */
+        .history-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .history-list::-webkit-scrollbar-track {
+            background: #f1f3f4;
+            border-radius: 10px;
+        }
+        
+        .history-list::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 10px;
+        }
+        
+        .history-list::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+        
+        .balance-amount.updating {
+            transform: scale(1.05);
+            color: #3498db;
+        }
+        
+        .balance-amount.changed {
+            animation: valueChanged 0.6s ease;
+        }
+        
+        @keyframes valueChanged {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); color: #e74c3c; }
+            100% { transform: scale(1); }
+        }
+        
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 480px) {
+            .stats-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+        }
+        
+        .stat-item {
+            background: white;
+            padding: clamp(12px, 3vw, 16px);
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e1e5e9;
+        }
+        
+        .stat-label {
+            font-size: clamp(11px, 2.5vw, 13px);
+            color: #666;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        
+        .stat-value {
+            font-size: clamp(13px, 3vw, 15px);
+            font-weight: 600;
+            color: #333;
+            word-break: break-word;
+        }
+        
+        /* Animação de carregamento */
+        .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Status colors */
+        .status-updated { color: #27ae60; }
+        .status-loading { color: #3498db; }
+        .status-error { color: #e74c3c; }
         
         .form-group {
             margin-bottom: 20px;
@@ -376,46 +617,211 @@
                 transform: translateY(0);
             }
         }
+        /* Histórico de Doações */
+        .history-container {
+            background: linear-gradient(135deg, #fff, #f8f9fa);
+            border-radius: 16px;
+            border: 2px solid #dee2e6;
+            padding: 25px;
+            height: fit-content;
+            min-height: 400px;
+            max-height: 600px;
+            overflow: hidden;
+        }
+        
+        .history-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .history-icon {
+            font-size: 24px;
+        }
+        
+        .history-title {
+            margin: 0;
+            font-size: clamp(18px, 4vw, 22px);
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .history-list {
+            max-height: 450px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .history-item {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .history-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #28a745;
+        }
+        
+        .history-amount {
+            font-size: clamp(16px, 4vw, 18px);
+            font-weight: 700;
+            color: #28a745;
+            margin-bottom: 5px;
+        }
+        
+        .history-donor {
+            font-size: clamp(14px, 3.5vw, 16px);
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 3px;
+            word-break: break-word;
+        }
+        
+        .history-time {
+            font-size: clamp(12px, 3vw, 14px);
+            color: #666;
+            font-style: italic;
+        }
+        
+        .empty-history {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+        
+        .empty-history-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .empty-history p {
+            margin: 0;
+            font-size: clamp(14px, 3.5vw, 16px);
+        }
+        
+        /* Scrollbar customizada para o histórico */
+        .history-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .history-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .history-list::-webkit-scrollbar-thumb {
+            background: #28a745;
+            border-radius: 3px;
+        }
+        
+        .history-list::-webkit-scrollbar-thumb:hover {
+            background: #218838;
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .history-container {
+                order: 2;
+                max-height: 300px;
+                min-height: 250px;
+            }
+            
+            .container {
+                order: 1;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>☕ Doação para o Café</h1>
-        <p class="subtitle">Sua doação será exibida no display do ESP32!</p>
-        
-        <form id="donation-form">
-            <div class="form-group">
-                <label for="donor_name">Nome Completo <span class="required">*</span></label>
-                <input type="text" id="donor_name" placeholder="João Silva" required autocomplete="name">
-            </div>
+    <div class="main-container">
+        <!-- Formulário Principal -->
+        <div class="container">
+            <h1>☕ Doação para o Café</h1>
+            <p class="subtitle">Sua doação será exibida no display do ESP32!</p>
             
-            <div class="form-group">
-                <label for="donor_email">Email <span class="optional-text">(opcional)</span></label>
-                <input type="email" id="donor_email" placeholder="joao@email.com" autocomplete="email">
-            </div>
-            
-            <div class="form-group">
-                <label for="donor_phone">Telefone <span class="optional-text">(opcional)</span></label>
-                <input type="tel" id="donor_phone" placeholder="(11) 99999-9999" autocomplete="tel">
-            </div>
-            
-            <div class="form-group">
-                <label>Escolha o valor da doação:</label>
-                <div class="amount-group">
-                    <div class="amount-btn" data-amount="2">R$ 2,00</div>
-                    <div class="amount-btn" data-amount="5">R$ 5,00</div>
-                    <div class="amount-btn" data-amount="10">R$ 10,00</div>
-                    <div class="amount-btn" data-amount="20">R$ 20,00</div>
+            <!-- Seção do Saldo Atual -->
+            <div class="balance-section">
+                <div class="balance-card">
+                    <div class="balance-icon">💰</div>
+                    <div class="balance-info">
+                        <div class="balance-label">Saldo Atual</div>
+                        <div class="balance-amount" id="current-balance">R$ 0,00</div>
+                    </div>
                 </div>
-                <input type="number" id="custom_amount" placeholder="Ou digite outro valor (mín. R$ 0,50)" step="0.50" min="0.50" max="1000">
+                
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-label">Último Doador</div>
+                        <div class="stat-value" id="last-donor">-</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Maior Doação</div>
+                        <div class="stat-value" id="top-donation">-</div>
+                    </div>
+                </div>
             </div>
             
-            <button type="submit" id="generate-btn">🎯 Gerar PIX Personalizado</button>
-        </form>
+            <form id="donation-form">
+                <div class="form-group">
+                    <label for="donor_name">Nome Completo <span class="required">*</span></label>
+                    <input type="text" id="donor_name" placeholder="João Silva" required autocomplete="name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="donor_email">Email <span class="optional-text">(opcional)</span></label>
+                    <input type="email" id="donor_email" placeholder="joao@email.com" autocomplete="email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="donor_phone">Telefone <span class="optional-text">(opcional)</span></label>
+                    <input type="tel" id="donor_phone" placeholder="(11) 99999-9999" autocomplete="tel">
+                </div>
+                
+                <div class="form-group">
+                    <label>Escolha o valor da doação:</label>
+                    <div class="amount-group">
+                        <div class="amount-btn" data-amount="2">R$ 2,00</div>
+                        <div class="amount-btn" data-amount="5">R$ 5,00</div>
+                        <div class="amount-btn" data-amount="10">R$ 10,00</div>
+                        <div class="amount-btn" data-amount="20">R$ 20,00</div>
+                    </div>
+                    <input type="number" id="custom_amount" placeholder="Ou digite outro valor (mín. R$ 0,50)" step="0.50" min="0.50" max="1000">
+                </div>
+                
+                <button type="submit" id="generate-btn">🎯 Gerar PIX Personalizado</button>
+            </form>
+            
+            <div id="qrcode"></div>
+            <div id="status"></div>
+        </div>
         
-        <div id="qrcode"></div>
-        <div id="status"></div>
+        <!-- Histórico de Doações -->
+        <div class="history-container">
+            <div class="history-header">
+                <div class="history-icon">📜</div>
+                <h2 class="history-title">Histórico de Doações</h2>
+            </div>
+            <div class="history-list" id="donation-history">
+                <div class="empty-history">
+                    <div class="empty-history-icon">⏳</div>
+                    <p>Carregando histórico...</p>
+                </div>
+            </div>
+        </div>
     </div>
-    <script src="script.js"></script>
+    <script src="script-simple.js"></script>
 </body>
 </html>
