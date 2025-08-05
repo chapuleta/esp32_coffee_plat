@@ -2,9 +2,15 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>☕ Doação para o Café - ESP32</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             display: flex; 
@@ -14,106 +20,362 @@
             min-height: 100vh; 
             margin: 0; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
+            padding: 15px;
+            line-height: 1.6;
         }
+        
         .container { 
             text-align: center; 
-            padding: 2rem; 
+            padding: clamp(20px, 5vw, 32px); 
             background-color: white; 
-            border-radius: 12px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            max-width: 400px;
+            border-radius: 16px; 
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            max-width: 500px;
             width: 100%;
+            position: relative;
+            overflow: hidden;
         }
+        
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+            background-size: 200% 100%;
+            animation: gradient 3s ease infinite;
+        }
+        
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
         h1 {
             color: #333;
-            margin-bottom: 10px;
-            font-size: 2em;
+            margin-bottom: 12px;
+            font-size: clamp(20px, 6vw, 32px);
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        
         .subtitle {
             color: #666;
             margin-bottom: 30px;
-            font-size: 1.1em;
+            font-size: clamp(14px, 3.5vw, 18px);
+            font-weight: 400;
         }
+        
         .form-group {
             margin-bottom: 20px;
             text-align: left;
         }
+        
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             color: #333;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: clamp(13px, 3vw, 16px);
         }
+        
         input {
             width: 100%;
-            padding: 12px;
+            padding: clamp(12px, 3vw, 16px);
             border: 2px solid #e1e5e9;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: border-color 0.3s;
+            border-radius: 12px;
+            font-size: clamp(14px, 4vw, 16px);
+            transition: all 0.3s ease;
             box-sizing: border-box;
+            background: #f8f9fa;
         }
+        
         input:focus {
             outline: none;
             border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
         }
+        
         .amount-group {
-            display: flex;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+            gap: 12px;
             margin-bottom: 20px;
         }
-        .amount-btn {
-            flex: 1;
-            padding: 10px;
-            border: 2px solid #e1e5e9;
-            background: white;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s;
+        
+        @media (max-width: 480px) {
+            .amount-group {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
         }
+        
+        .amount-btn {
+            padding: clamp(12px, 3vw, 16px);
+            border: 2px solid #e1e5e9;
+            background: #f8f9fa;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            color: #333;
+            font-size: clamp(12px, 3vw, 14px);
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        
+        .amount-btn:hover {
+            border-color: #667eea;
+            background: #e8ecff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
         .amount-btn.active {
-            background: #667eea;
+            background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
             border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
+        
         button {
             width: 100%;
-            padding: 15px;
+            padding: clamp(14px, 4vw, 18px);
             border: none;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: transform 0.3s;
+            font-size: clamp(14px, 4vw, 18px);
+            font-weight: 700;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-height: 54px;
         }
-        button:hover {
-            transform: translateY(-2px);
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #5a67d8, #667eea);
         }
+        
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
+        
         #qrcode {
-            margin-top: 20px;
-            padding: 20px;
+            margin-top: 25px;
+            padding: clamp(15px, 4vw, 25px);
             background: #f8f9fa;
-            border-radius: 8px;
+            border-radius: 16px;
             display: none;
+            border: 2px dashed #dee2e6;
         }
+        
+        #qrcode h3 {
+            margin-bottom: 15px;
+            color: #27ae60;
+            font-size: clamp(16px, 4vw, 20px);
+        }
+        
+        #qrcode p {
+            margin-bottom: 12px;
+            font-size: clamp(13px, 3vw, 15px);
+            color: #333;
+        }
+        
+        #qrcode img {
+            max-width: 100%;
+            width: clamp(200px, 50vw, 280px);
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            margin: 15px 0;
+        }
+        
+        #qrcode textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: clamp(10px, 2.5vw, 12px);
+            resize: vertical;
+            background: white;
+            word-break: break-all;
+        }
+        
         #status {
-            margin-top: 15px;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 6px;
+            margin-top: 20px;
+            font-weight: 600;
+            padding: clamp(12px, 3vw, 16px);
+            border-radius: 12px;
+            font-size: clamp(13px, 3vw, 15px);
+            line-height: 1.4;
         }
-        .success { background: #d4edda; color: #155724; }
-        .error { background: #f8d7da; color: #721c24; }
-        .info { background: #d1ecf1; color: #0c5460; }
+        
+        .success { 
+            background: linear-gradient(135deg, #d4edda, #c3e6cb); 
+            color: #155724; 
+            border: 1px solid #c3e6cb;
+        }
+        .error { 
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb); 
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info { 
+            background: linear-gradient(135deg, #cce7ff, #9ecaff); 
+            color: #004085;
+            border: 1px solid #9ecaff;
+        }
+        
         .required { color: #dc3545; }
+        
+        .optional-text {
+            font-size: clamp(11px, 2.5vw, 13px);
+            color: #7f8c8d;
+            font-weight: normal;
+        }
+        
+        /* Responsividade específica */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                border-radius: 12px;
+            }
+            
+            .form-group {
+                margin-bottom: 18px;
+            }
+            
+            input {
+                padding: 16px 14px;
+            }
+            
+            .amount-btn {
+                min-height: 48px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 8px;
+            }
+            
+            .container {
+                padding: 20px 16px;
+            }
+            
+            .amount-group {
+                gap: 6px;
+            }
+        }
+        
+        /* Para telas muito pequenas (menor que 360px) */
+        @media (max-width: 360px) {
+            .amount-group {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            
+            .amount-btn {
+                min-height: 44px;
+                font-size: 12px;
+            }
+        }
+        
+        /* Para telas grandes */
+        @media (min-width: 1200px) {
+            .container {
+                max-width: 480px;
+            }
+        }
+        
+        /* Melhorias de acessibilidade */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Modo escuro */
+        @media (prefers-color-scheme: dark) {
+            .container {
+                background-color: #2c3e50;
+                color: white;
+            }
+            
+            h1, .subtitle, label {
+                color: white;
+            }
+            
+            input {
+                background: #34495e;
+                color: white;
+                border-color: #4a5f7a;
+            }
+            
+            input:focus {
+                background: #3c5369;
+            }
+            
+            .amount-btn {
+                background: #34495e;
+                color: white;
+                border-color: #4a5f7a;
+            }
+            
+            .amount-btn:hover {
+                background: #3c5369;
+            }
+            
+            #qrcode {
+                background: #34495e;
+                border-color: #4a5f7a;
+            }
+            
+            #qrcode textarea {
+                background: #3c5369;
+                color: white;
+                border-color: #4a5f7a;
+            }
+        }
+        
+        /* Animações suaves */
+        .container {
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
@@ -124,30 +386,31 @@
         <form id="donation-form">
             <div class="form-group">
                 <label for="donor_name">Nome Completo <span class="required">*</span></label>
-                <input type="text" id="donor_name" placeholder="João Silva" required>
+                <input type="text" id="donor_name" placeholder="João Silva" required autocomplete="name">
             </div>
             
             <div class="form-group">
-                <label for="donor_email">Email (opcional)</label>
-                <input type="email" id="donor_email" placeholder="joao@email.com">
+                <label for="donor_email">Email <span class="optional-text">(opcional)</span></label>
+                <input type="email" id="donor_email" placeholder="joao@email.com" autocomplete="email">
             </div>
             
             <div class="form-group">
-                <label for="donor_phone">Telefone (opcional)</label>
-                <input type="tel" id="donor_phone" placeholder="(11) 99999-9999">
+                <label for="donor_phone">Telefone <span class="optional-text">(opcional)</span></label>
+                <input type="tel" id="donor_phone" placeholder="(11) 99999-9999" autocomplete="tel">
             </div>
             
             <div class="form-group">
-                <label>Escolha o valor:</label>
+                <label>Escolha o valor da doação:</label>
                 <div class="amount-group">
-                    <div class="amount-btn" data-amount="1">R$ 1,00</div>
                     <div class="amount-btn" data-amount="2">R$ 2,00</div>
                     <div class="amount-btn" data-amount="5">R$ 5,00</div>
+                    <div class="amount-btn" data-amount="10">R$ 10,00</div>
+                    <div class="amount-btn" data-amount="20">R$ 20,00</div>
                 </div>
-                <input type="number" id="custom_amount" placeholder="Ou digite outro valor" step="0.50" min="0.50">
+                <input type="number" id="custom_amount" placeholder="Ou digite outro valor (mín. R$ 0,50)" step="0.50" min="0.50" max="1000">
             </div>
             
-            <button type="submit" id="generate-btn">🎯 Gerar PIX</button>
+            <button type="submit" id="generate-btn">🎯 Gerar PIX Personalizado</button>
         </form>
         
         <div id="qrcode"></div>
