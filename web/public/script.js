@@ -23,60 +23,34 @@ document.addEventListener('DOMContentLoaded', function() {
         amountBtns.forEach(b => b.classList.remove('active'));
     });
     
+    // Mostra loading state inicial
+    showLoadingState();
+    
     // 💰 Carrega saldo inicial e histórico
     console.log('🚀 CHAMANDO loadCurrentBalance()');
     loadCurrentBalance();
     console.log('🚀 CHAMANDO loadDonationHistory()');
     loadDonationHistory();
     
-    // 🚀 Atualização inteligente e mais rápida
-    startSmartBalanceUpdates();
+    // 🚀 Atualização regular
+    setInterval(loadCurrentBalance, 10000); // 10s
+    setInterval(loadDonationHistory, 30000); // 30s
 });
 
-// 🚀 Sistema de atualização inteligente
-let updateInterval;
-let historyUpdateInterval;
-let isPageVisible = true;
-let consecutiveErrors = 0;
-
-function startSmartBalanceUpdates() {
-    // Atualização rápida inicial (a cada 5 segundos)
-    updateInterval = setInterval(loadCurrentBalance, 5000);
-    historyUpdateInterval = setInterval(loadDonationHistory, 30000); // Histórico a cada 30s
+function showLoadingState() {
+    const balanceEl = document.getElementById('current-balance');
+    const lastDonorEl = document.getElementById('last-donor');
+    const topDonationEl = document.getElementById('top-donation');
+    const historyEl = document.getElementById('donation-history');
     
-    // Detecta quando a página fica visível/invisível
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-            isPageVisible = false;
-            // Reduz frequência quando página não está visível (30s)
-            clearInterval(updateInterval);
-            clearInterval(historyUpdateInterval);
-            updateInterval = setInterval(loadCurrentBalance, 30000);
-            historyUpdateInterval = setInterval(loadDonationHistory, 120000); // 2min
-            console.log('📱 Página em background - atualizações reduzidas');
-        } else {
-            isPageVisible = true;
-            // Volta para atualização rápida quando página fica visível
-            clearInterval(updateInterval);
-            clearInterval(historyUpdateInterval);
-            updateInterval = setInterval(loadCurrentBalance, 5000);
-            historyUpdateInterval = setInterval(loadDonationHistory, 30000);
-            loadCurrentBalance(); // Atualiza imediatamente
-            loadDonationHistory(); // Atualiza histórico também
-            console.log('📱 Página ativa - atualizações normais');
-        }
-    });
-    
-    // Detecta quando usuário volta para a aba (atualiza imediatamente)
-    window.addEventListener('focus', function() {
-        console.log('👁️ Usuário focou na página - atualizando dados');
-        loadCurrentBalance();
-        loadDonationHistory();
-    });
+    if (balanceEl) balanceEl.textContent = 'Carregando...';
+    if (lastDonorEl) lastDonorEl.textContent = 'Carregando...';
+    if (topDonationEl) topDonationEl.textContent = 'Carregando...';
+    if (historyEl) historyEl.innerHTML = '<div class="empty-history"><p>📜 Carregando histórico...</p></div>';
 }
 
-// 💰 Função para carregar o saldo atual do Firebase (otimizada)
-async function loadCurrentBalance(retryCount = 0) {
+// 💰 Função para carregar o saldo atual do Firebase (simplificada)
+async function loadCurrentBalance() {
     const balanceElement = document.getElementById('current-balance');
     const lastDonorElement = document.getElementById('last-donor');
     const topDonationElement = document.getElementById('top-donation');
@@ -84,113 +58,56 @@ async function loadCurrentBalance(retryCount = 0) {
     try {
         console.log('🔍 Buscando saldo atual...');
         
-        // 🚀 Requisição otimizada com timeout curto
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
-        
         const response = await fetch('/api/get-current-balance', {
-            signal: controller.signal,
             headers: {
-                'Cache-Control': 'no-cache', // Força busca atualizada
+                'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
             }
         });
         
-        clearTimeout(timeoutId);
-        
         console.log(`📡 Response status: ${response.status}`);
-        console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Error response body:', errorText);
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ${response.status}`);
         }
         
-        const responseText = await response.text();
-        console.log('📋 Raw response:', responseText);
-        
-        let data;
-        try {
-            data = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error('❌ JSON parse error:', parseError);
-            throw new Error('Invalid JSON in response');
-        }
-        
+        const data = await response.json();
         console.log('📋 Dados recebidos da API:', data);
         
-        // Verifica se os dados estão corretos
-        if (typeof data.total_amount === 'undefined') {
-            throw new Error('total_amount não encontrado na resposta');
-        }
-        
-        // 🎯 Verifica se os dados realmente mudaram
-        const currentBalance = balanceElement.textContent;
-        const newBalance = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
-        
-        if (currentBalance !== newBalance) {
-            // ✨ Animação de mudança de valor
-            balanceElement.style.transform = 'scale(1.1)';
-            balanceElement.style.color = '#27ae60';
-            setTimeout(() => {
-                balanceElement.style.transform = 'scale(1)';
-                balanceElement.style.color = '';
-            }, 300);
-            
-            console.log(`💰 Saldo alterado: ${currentBalance} → ${newBalance}`);
-            
-            // Atualiza histórico quando saldo muda
-            loadDonationHistory();
-        }
-        
         // Atualiza saldo principal
-        balanceElement.textContent = newBalance;
+        if (balanceElement) {
+            const newBalance = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
+            balanceElement.textContent = newBalance;
+            console.log('✅ Saldo atualizado:', newBalance);
+        }
         
         // Atualiza último doador
-        const lastDonor = data.last_donor && data.last_donor !== 'Doador Anônimo' ? 
-            (data.last_donor.length > 20 ? data.last_donor.substring(0, 20) + '...' : data.last_donor) : 
-            'Nenhum ainda';
-        lastDonorElement.textContent = lastDonor;
-        console.log('👤 Último doador:', lastDonor);
+        if (lastDonorElement) {
+            const lastDonor = data.last_donor && data.last_donor !== 'Doador Anônimo' ? 
+                (data.last_donor.length > 20 ? data.last_donor.substring(0, 20) + '...' : data.last_donor) : 
+                'Nenhum ainda';
+            lastDonorElement.textContent = lastDonor;
+            console.log('👤 Último doador:', lastDonor);
+        }
         
         // Atualiza maior doação
-        const topDonation = data.top_amount > 0 ? 
-            `${data.top_donor.length > 15 ? data.top_donor.substring(0, 15) + '...' : data.top_donor} - R$ ${data.top_amount.toFixed(2).replace('.', ',')}` : 
-            'Nenhuma ainda';
-        topDonationElement.textContent = topDonation;
-        console.log('🏆 Maior doação:', topDonation);
+        if (topDonationElement) {
+            const topDonation = data.top_amount > 0 ? 
+                `${data.top_donor.length > 15 ? data.top_donor.substring(0, 15) + '...' : data.top_donor} - R$ ${data.top_amount.toFixed(2).replace('.', ',')}` : 
+                'Nenhuma ainda';
+            topDonationElement.textContent = topDonation;
+            console.log('🏆 Maior doação:', topDonation);
+        }
         
-        // Reset contador de erros
-        consecutiveErrors = 0;
-        
-        console.log('✅ Saldo atualizado com sucesso:', data);
+        console.log('✅ Saldo atualizado com sucesso');
         
     } catch (error) {
-        consecutiveErrors++;
-        console.error(`❌ Erro ao carregar saldo (tentativa ${retryCount + 1}):`, error.message);
-        console.error('📊 Stack trace:', error.stack);
+        console.error('❌ Erro ao carregar saldo:', error);
         
-        // 🔄 Retry automático para erros de rede
-        if (retryCount < 2 && (error.name === 'AbortError' || error.message.includes('Failed to fetch'))) {
-            console.log(`🔄 Tentando novamente em 2s... (${retryCount + 1}/3)`);
-            setTimeout(() => loadCurrentBalance(retryCount + 1), 2000);
-            return;
-        }
-        
-        // Valores padrão em caso de erro persistente
-        if (balanceElement.textContent === 'R$ 0,00' || consecutiveErrors > 5) {
-            balanceElement.textContent = 'R$ --,--';
-            lastDonorElement.textContent = 'Erro ao carregar';
-            topDonationElement.textContent = 'Erro ao carregar';
-        }
-        
-        // 🚀 Ajusta frequência de atualização baseado nos erros
-        if (consecutiveErrors > 3) {
-            clearInterval(updateInterval);
-            updateInterval = setInterval(loadCurrentBalance, 15000); // Reduz para 15s
-            console.log('⚠️ Muitos erros - reduzindo frequência para 15s');
-        }
+        // Valores padrão em caso de erro
+        if (balanceElement) balanceElement.textContent = 'Erro ao carregar';
+        if (lastDonorElement) lastDonorElement.textContent = 'Erro ao carregar';
+        if (topDonationElement) topDonationElement.textContent = 'Erro ao carregar';
     }
 }
 
@@ -209,31 +126,41 @@ async function loadDonationHistory() {
         });
         
         console.log(`📡 History response status: ${response.status}`);
-        console.log('📡 History response headers:', Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ History error response body:', errorText);
             throw new Error(`HTTP ${response.status}`);
         }
         
-        const responseText = await response.text();
-        console.log('📋 Raw history response:', responseText);
-        
-        let data;
-        try {
-            data = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error('❌ History JSON parse error:', parseError);
-            throw new Error('Invalid JSON in history response');
-        }
-        
+        const data = await response.json();
         console.log('📋 Dados de histórico recebidos:', data);
         
-        if (data.success && data.history && data.history.length > 0) {
+        if (data.success && data.history && Array.isArray(data.history) && data.history.length > 0) {
             console.log(`📜 Encontradas ${data.history.length} doações no histórico`);
             
-            historyContainer.innerHTML = data.history.map(donation => `
+            // Verifica se cada item do histórico tem as propriedades necessárias
+            const validDonations = data.history.filter(donation => {
+                if (!donation || typeof donation !== 'object') {
+                    console.warn('⚠️ Item inválido no histórico:', donation);
+                    return false;
+                }
+                if (typeof donation.amount !== 'number' || donation.amount <= 0) {
+                    console.warn('⚠️ Item com valor inválido:', donation);
+                    return false;
+                }
+                if (!donation.donor_name) {
+                    console.warn('⚠️ Item sem nome do doador:', donation);
+                    return false;
+                }
+                if (!donation.timestamp) {
+                    console.warn('⚠️ Item sem timestamp:', donation);
+                    return false;
+                }
+                return true;
+            });
+            
+            console.log(`✅ ${validDonations.length} doações válidas após filtro`);
+            
+            historyContainer.innerHTML = validDonations.map(donation => `
                 <div class="history-item">
                     <div class="history-amount">R$ ${donation.amount.toFixed(2).replace('.', ',')}</div>
                     <div class="history-donor">${donation.donor_name}</div>
@@ -251,11 +178,10 @@ async function loadDonationHistory() {
         }
     } catch (error) {
         console.error('❌ Erro ao carregar histórico:', error);
-        console.error('📊 Stack trace:', error.stack);
         historyContainer.innerHTML = `
             <div class="empty-history">
                 <div class="empty-history-icon">❌</div>
-                <p>Erro ao carregar histórico</p>
+                <p>Erro ao carregar histórico: ${error.message}</p>
             </div>
         `;
     }
@@ -287,6 +213,7 @@ function formatTimestamp(timestamp) {
     }
 }
 
+// Formulário de doação
 document.getElementById('donation-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -404,41 +331,11 @@ function monitorPayment(paymentId, donorName) {
             if (data.status === 'approved') {
                 showStatus(`🎉 Pagamento confirmado! Obrigado, ${donorName}! Seu nome já aparece no ESP32!`, 'success');
                 
-                // 💰 Atualização super rápida após confirmação
-                console.log('💰 Pagamento aprovado - iniciando atualizações rápidas...');
-                
-                // Primeira atualização imediata
+                // Atualiza dados imediatamente
                 setTimeout(() => {
                     loadCurrentBalance();
                     loadDonationHistory();
-                }, 1000);
-                
-                // Segunda atualização em 3s (caso a primeira não tenha pego)
-                setTimeout(() => {
-                    loadCurrentBalance();
-                    loadDonationHistory();
-                }, 3000);
-                
-                // Terceira atualização em 6s (garantia)
-                setTimeout(() => {
-                    loadCurrentBalance();
-                    loadDonationHistory();
-                    showStatus(`💰 Saldo atualizado! Obrigado pela sua doação, ${donorName}!`, 'success');
-                }, 6000);
-                
-                // 🔥 Temporariamente acelera as atualizações por 2 minutos
-                clearInterval(updateInterval);
-                clearInterval(historyUpdateInterval);
-                updateInterval = setInterval(loadCurrentBalance, 3000); // A cada 3s
-                historyUpdateInterval = setInterval(loadDonationHistory, 10000); // A cada 10s
-                
-                setTimeout(() => {
-                    clearInterval(updateInterval);
-                    clearInterval(historyUpdateInterval);
-                    updateInterval = setInterval(loadCurrentBalance, 5000); // Volta para 5s
-                    historyUpdateInterval = setInterval(loadDonationHistory, 30000); // Volta para 30s
-                    console.log('💰 Voltando para atualização normal');
-                }, 120000); // 2 minutos
+                }, 2000);
                 
                 return;
             } else if (data.status === 'rejected' || data.status === 'cancelled') {
