@@ -280,7 +280,9 @@ module.exports = async (req, res) => {
             if (status === 'approved') {
                 console.log(`✅ Pagamento aprovado! Verificando se já foi processado...`);
                 
-                // 🔒 VERIFICA SE JÁ EXISTE NO HISTÓRICO (ANTI-DUPLICAÇÃO)
+                // 🔒 VERIFICAÇÃO DUPLA ANTI-DUPLICAÇÃO - Mais robusta
+                
+                // 1️⃣ PRIMEIRA VERIFICAÇÃO: Busca por payment_id no histórico
                 const existingHistoryRef = db.ref('donations/history')
                     .orderByChild('payment_id')
                     .equalTo(paymentId);
@@ -289,51 +291,119 @@ module.exports = async (req, res) => {
                 const existingData = existingSnapshot.val();
                 
                 if (existingData) {
-                    console.log(`⚠️ Pagamento ${paymentId} já foi processado anteriormente!`);
-                    console.log(`🔍 Dados existentes:`, Object.values(existingData)[0]);
+                    const existingEntry = Object.values(existingData)[0];
+                    console.log(`⚠️ DUPLICATA DETECTADA! Pagamento ${paymentId} já foi processado em ${existingEntry.processed_at}`);
+                    console.log(`🔍 Dados existentes:`, existingEntry);
                     
                     return res.status(200).json({
                         message: 'Webhook já processado anteriormente (duplicata evitada)',
                         payment_id: paymentId,
                         status: status,
                         already_processed: true,
-                        processed_at: new Date().toISOString()
+                        first_processed_at: existingEntry.processed_at,
+                        current_attempt_at: new Date().toISOString()
                     });
                 }
                 
-                console.log(`🆕 Novo pagamento confirmado! Processando automaticamente...`);
+                // 2️⃣ SEGUNDA VERIFICAÇÃO: Controle temporal para evitar processamento muito rápido
+                const processingLockRef = db.ref(`payment_processing_locks/${paymentId}`);
                 
-                // Atualiza o status do pagamento para o ESP32 detectar
-                const paymentStatusRef = db.ref('payment_status/status');
-                await paymentStatusRef.set('approved');
-                
-                // AUTOMÁTICO: Atualiza o saldo total e informações dos doadores
-                await updateTotalAmount(amount, donorName);
-                
-                // Registra o histórico completo da doação
-                const historyRef = db.ref('donations/history').push();
-                await historyRef.set({
-                    payment_id: paymentId,
-                    amount: amount.toFixed(2),
-                    donor_name: donorName,
-                    donor_email: donorEmail,
-                    donor_phone: donorPhone,
-                    donor_document: donorDocument ? donorDocument.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.**$4') : '',
-                    payment_method: paymentMethod,
-                    pix_info: pixInfo,
-                    timestamp: admin.database.ServerValue.TIMESTAMP,
-                    status: 'approved',
-                    processed_at: new Date().toISOString()
+                // 🚀 TRANSAÇÃO ATÔMICA para garantir que apenas um webhook processe
+                const lockResult = await processingLockRef.transaction((currentLock) => {
+                    if (currentLock === null) {
+                        // Não há lock, podemos processar
+                        return {
+                            timestamp: Date.now(),
+                            processing_start: new Date().toISOString(),
+                            webhook_attempt: 1,
+                            server_time: admin.database.ServerValue.TIMESTAMP
+                        };
+                    } else {
+                        // Já há um lock, verificar idade
+                        const lockAge = Date.now() - currentLock.timestamp;
+                        if (lockAge < 60000) { // Lock por 60 segundos
+                            // Lock ainda válido, abortar transação
+                            return; // undefined = abort transaction
+                        } else {
+                            // Lock expirado, substituir
+                            return {
+                                timestamp: Date.now(),
+                                processing_start: new Date().toISOString(),
+                                webhook_attempt: (currentLock.webhook_attempt || 0) + 1,
+                                previous_lock_expired: true,
+                                server_time: admin.database.ServerValue.TIMESTAMP
+                            };
+                        }
+                    }
                 });
                 
-                console.log(`📝 Doação registrada no histórico com dados completos:`);
-                console.log(`   - ID: ${paymentId}`);
-                console.log(`   - Doador: ${donorName}`);
-                console.log(`   - Email: ${donorEmail}`);
-                console.log(`   - Valor: R$ ${amount.toFixed(2)}`);
-                console.log(`   - Método: ${paymentMethod} ${pixInfo ? `(${pixInfo})` : ''}`);
-                console.log(`🎉 Sistema atualizado automaticamente!`);
+                if (!lockResult.committed) {
+                    console.log(`� DUPLICATA EVITADA! Outro webhook já está processando o pagamento ${paymentId}`);
+                    console.log(`🔍 Lock atual:`, lockResult.snapshot.val());
+                    
+                    return res.status(200).json({
+                        message: 'Webhook duplicado evitado - outro processo já está lidando com este pagamento',
+                        payment_id: paymentId,
+                        status: status,
+                        duplicate_prevented: true,
+                        existing_lock: lockResult.snapshot.val(),
+                        current_attempt_at: new Date().toISOString()
+                    });
+                }
                 
+                const lockData = lockResult.snapshot.val();
+                console.log(`🔒 Lock obtido com sucesso para ${paymentId}:`, lockData);
+                
+                try {
+                    // Atualiza o status do pagamento para o ESP32 detectar
+                    const paymentStatusRef = db.ref('payment_status/status');
+                    await paymentStatusRef.set('approved');
+                    
+                    // AUTOMÁTICO: Atualiza o saldo total e informações dos doadores
+                    console.log(`💰 Iniciando atualização do saldo com valor: R$ ${amount.toFixed(2)}`);
+                    const newTotal = await updateTotalAmount(amount, donorName);
+                    console.log(`💰 Saldo atualizado com sucesso para: R$ ${newTotal.toFixed(2)}`);
+                    
+                    // Registra o histórico completo da doação
+                    const historyRef = db.ref('donations/history').push();
+                    const historyData = {
+                        payment_id: paymentId,
+                        amount: parseFloat(amount.toFixed(2)), // Garantir que é número
+                        donor_name: donorName,
+                        donor_email: donorEmail,
+                        donor_phone: donorPhone,
+                        donor_document: donorDocument ? donorDocument.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.**$4') : '',
+                        payment_method: paymentMethod,
+                        pix_info: pixInfo,
+                        timestamp: admin.database.ServerValue.TIMESTAMP,
+                        status: 'approved',
+                        processed_at: new Date().toISOString(),
+                        webhook_received_at: new Date().toISOString()
+                    };
+                    
+                    await historyRef.set(historyData);
+                    
+                    console.log(`📝 Doação registrada no histórico com dados completos:`);
+                    console.log(`   - ID: ${paymentId}`);
+                    console.log(`   - Doador: ${donorName}`);
+                    console.log(`   - Email: ${donorEmail}`);
+                    console.log(`   - Valor: R$ ${amount.toFixed(2)}`);
+                    console.log(`   - Método: ${paymentMethod} ${pixInfo ? `(${pixInfo})` : ''}`);
+                    console.log(`🎉 Sistema atualizado automaticamente!`);
+                    
+                    // 4️⃣ REMOVE O LOCK após processamento bem-sucedido
+                    await processingLockRef.remove();
+                    console.log(`🔓 Lock de processamento removido para ${paymentId}`);
+                    
+                } catch (processingError) {
+                    console.error(`❌ Erro durante o processamento de ${paymentId}:`, processingError);
+                    
+                    // Remove o lock em caso de erro para permitir nova tentativa
+                    await processingLockRef.remove();
+                    console.log(`🔓 Lock removido devido ao erro`);
+                    
+                    throw processingError; // Re-throw para o catch externo
+                }
             } else {
                 console.log(`⏳ Pagamento com status "${status}" - aguardando aprovação`);
                 

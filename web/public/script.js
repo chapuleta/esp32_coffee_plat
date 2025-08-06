@@ -1,5 +1,124 @@
 console.log('🚀 SCRIPT CARREGADO - script.js iniciado');
 
+// 🔒 Sistema de Cache Inteligente
+const CacheManager = {
+    keys: {
+        balance: 'coffee_donation_balance',
+        history: 'coffee_donation_history',
+        lastUpdate: 'coffee_donation_last_update'
+    },
+    
+    // Salva dados no cache
+    save(key, data) {
+        try {
+            const cacheData = {
+                data: data,
+                timestamp: Date.now(),
+                version: '1.0'
+            };
+            localStorage.setItem(this.keys[key], JSON.stringify(cacheData));
+            console.log(`💾 Cache salvo: ${key}`, data);
+        } catch (error) {
+            console.warn('⚠️ Erro ao salvar cache:', error);
+        }
+    },
+    
+    // Recupera dados do cache
+    load(key) {
+        try {
+            const cached = localStorage.getItem(this.keys[key]);
+            if (!cached) return null;
+            
+            const cacheData = JSON.parse(cached);
+            const age = Date.now() - cacheData.timestamp;
+            const maxAge = 5 * 60 * 1000; // 5 minutos
+            
+            if (age > maxAge) {
+                console.log(`🗑️ Cache expirado: ${key} (${Math.round(age/1000)}s)`);
+                this.clear(key);
+                return null;
+            }
+            
+            console.log(`📦 Cache carregado: ${key} (${Math.round(age/1000)}s atrás)`);
+            return cacheData.data;
+        } catch (error) {
+            console.warn('⚠️ Erro ao carregar cache:', error);
+            return null;
+        }
+    },
+    
+    // Limpa cache específico
+    clear(key) {
+        localStorage.removeItem(this.keys[key]);
+    },
+    
+    // Limpa todo o cache
+    clearAll() {
+        Object.values(this.keys).forEach(key => localStorage.removeItem(key));
+    }
+};
+
+// 🔄 Sistema de Gerenciamento de Estado da Aplicação
+const AppState = {
+    isVisible: true,
+    lastActiveTime: Date.now(),
+    intervals: {
+        balance: null,
+        history: null
+    },
+    
+    // Detecta quando a página fica visível/invisível
+    init() {
+        document.addEventListener('visibilitychange', () => {
+            const wasVisible = this.isVisible;
+            this.isVisible = !document.hidden;
+            
+            if (!wasVisible && this.isVisible) {
+                console.log('👁️ Aplicação reativada - sincronizando dados...');
+                this.onAppReactivated();
+            } else if (wasVisible && !this.isVisible) {
+                console.log('😴 Aplicação em background');
+                this.lastActiveTime = Date.now();
+            }
+        });
+        
+        // Detecta foco/desfoco da janela
+        window.addEventListener('focus', () => {
+            if (Date.now() - this.lastActiveTime > 30000) { // 30s
+                console.log('🔄 Janela focada após inatividade - atualizando...');
+                this.onAppReactivated();
+            }
+        });
+    },
+    
+    // Quando a app é reativada
+    async onAppReactivated() {
+        try {
+            // Busca dados atualizados em background
+            await Promise.all([
+                loadCurrentBalance(true), // true = silencioso
+                loadDonationHistory(true)
+            ]);
+            console.log('✅ Sincronização completa');
+        } catch (error) {
+            console.error('❌ Erro na sincronização:', error);
+        }
+    },
+    
+    // Configura intervalos inteligentes
+    setupIntervals() {
+        // Limpa intervalos existentes
+        if (this.intervals.balance) clearInterval(this.intervals.balance);
+        if (this.intervals.history) clearInterval(this.intervals.history);
+        
+        // Configura novos intervalos
+        this.intervals.balance = setInterval(() => loadCurrentBalance(true), 10000); // 10s
+        this.intervals.history = setInterval(() => loadDonationHistory(true), 30000); // 30s
+        
+        console.log('⏰ Intervalos de atualização configurados');
+    }
+};
+
 // Manipulação dos botões de valor
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 DOM CARREGADO - executando inicialização');
@@ -23,19 +142,53 @@ document.addEventListener('DOMContentLoaded', function() {
         amountBtns.forEach(b => b.classList.remove('active'));
     });
     
-    // Mostra loading state inicial
-    showLoadingState();
+    // Inicializa sistema de estado
+    AppState.init();
     
-    // 💰 Carrega saldo inicial e histórico
-    console.log('🚀 CHAMANDO loadCurrentBalance()');
-    loadCurrentBalance();
-    console.log('🚀 CHAMANDO loadDonationHistory()');
-    loadDonationHistory();
+    // 🚀 CARREGAMENTO INTELIGENTE
+    loadAppWithCache();
     
-    // 🚀 Atualização regular
-    setInterval(loadCurrentBalance, 10000); // 10s
-    setInterval(loadDonationHistory, 30000); // 30s
+    // Configura intervalos
+    AppState.setupIntervals();
 });
+
+// � Carregamento inicial inteligente com cache
+async function loadAppWithCache() {
+    console.log('🚀 Iniciando carregamento inteligente...');
+    
+    // 1. Tenta carregar do cache primeiro
+    const cachedBalance = CacheManager.load('balance');
+    const cachedHistory = CacheManager.load('history');
+    
+    if (cachedBalance) {
+        console.log('⚡ Exibindo saldo do cache');
+        displayBalanceData(cachedBalance);
+    } else {
+        showLoadingState();
+    }
+    
+    if (cachedHistory) {
+        console.log('⚡ Exibindo histórico do cache');
+        displayHistoryData(cachedHistory);
+    } else if (!cachedBalance) {
+        showLoadingState();
+    }
+    
+    // 2. Busca dados atualizados em paralelo
+    try {
+        console.log('🔄 Buscando dados atualizados...');
+        await Promise.all([
+            loadCurrentBalance(cachedBalance ? true : false), // silencioso se tem cache
+            loadDonationHistory(cachedHistory ? true : false)
+        ]);
+        console.log('✅ Carregamento inicial completo');
+    } catch (error) {
+        console.error('❌ Erro no carregamento inicial:', error);
+        if (!cachedBalance && !cachedHistory) {
+            showErrorState('Erro ao conectar com o servidor. Tentando novamente...');
+        }
+    }
+}
 
 function showLoadingState() {
     const balanceEl = document.getElementById('current-balance');
@@ -49,142 +202,240 @@ function showLoadingState() {
     if (historyEl) historyEl.innerHTML = '<div class="empty-history"><p>📜 Carregando histórico...</p></div>';
 }
 
-// 💰 Função para carregar o saldo atual do Firebase (simplificada)
-async function loadCurrentBalance() {
+function showErrorState(message = 'Erro de conexão') {
+    const balanceEl = document.getElementById('current-balance');
+    const lastDonorEl = document.getElementById('last-donor');
+    const topDonationEl = document.getElementById('top-donation');
+    const historyEl = document.getElementById('donation-history');
+    
+    if (balanceEl && balanceEl.textContent === 'Carregando...') balanceEl.textContent = message;
+    if (lastDonorEl && lastDonorEl.textContent === 'Carregando...') lastDonorEl.textContent = message;
+    if (topDonationEl && topDonationEl.textContent === 'Carregando...') topDonationEl.textContent = message;
+    if (historyEl && historyEl.innerHTML.includes('Carregando')) {
+        historyEl.innerHTML = `<div class="empty-history"><div class="empty-history-icon">⚠️</div><p>${message}</p></div>`;
+    }
+}
+
+// 💰 Função para carregar o saldo atual do Firebase (otimizada)
+async function loadCurrentBalance(silent = false) {
     const balanceElement = document.getElementById('current-balance');
     const lastDonorElement = document.getElementById('last-donor');
     const topDonationElement = document.getElementById('top-donation');
     
     try {
-        console.log('🔍 Buscando saldo atual...');
+        if (!silent) console.log('🔍 Buscando saldo atual...');
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
         
         const response = await fetch('/api/get-current-balance', {
             headers: {
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
-            }
+            },
+            signal: controller.signal
         });
         
-        console.log(`📡 Response status: ${response.status}`);
+        clearTimeout(timeoutId);
+        
+        if (!silent) console.log(`📡 Response status: ${response.status}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('📋 Dados recebidos da API:', data);
+        if (!silent) console.log('📋 Dados recebidos da API:', data);
         
-        // Atualiza saldo principal
-        if (balanceElement) {
-            const newBalance = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
-            balanceElement.textContent = newBalance;
-            console.log('✅ Saldo atualizado:', newBalance);
-        }
+        // Salva no cache
+        CacheManager.save('balance', data);
         
-        // Atualiza último doador
-        if (lastDonorElement) {
-            const lastDonor = data.last_donor && data.last_donor !== 'Doador Anônimo' ? 
-                (data.last_donor.length > 20 ? data.last_donor.substring(0, 20) + '...' : data.last_donor) : 
-                'Nenhum ainda';
-            lastDonorElement.textContent = lastDonor;
-            console.log('👤 Último doador:', lastDonor);
-        }
+        // Exibe os dados
+        displayBalanceData(data);
         
-        // Atualiza maior doação
-        if (topDonationElement) {
-            const topDonation = data.top_amount > 0 ? 
-                `${data.top_donor.length > 15 ? data.top_donor.substring(0, 15) + '...' : data.top_donor} - R$ ${data.top_amount.toFixed(2).replace('.', ',')}` : 
-                'Nenhuma ainda';
-            topDonationElement.textContent = topDonation;
-            console.log('🏆 Maior doação:', topDonation);
-        }
-        
-        console.log('✅ Saldo atualizado com sucesso');
+        if (!silent) console.log('✅ Saldo atualizado com sucesso');
         
     } catch (error) {
         console.error('❌ Erro ao carregar saldo:', error);
         
-        // Valores padrão em caso de erro
-        if (balanceElement) balanceElement.textContent = 'Erro ao carregar';
-        if (lastDonorElement) lastDonorElement.textContent = 'Erro ao carregar';
-        if (topDonationElement) topDonationElement.textContent = 'Erro ao carregar';
+        // Se não é um reload silencioso, tenta carregar do cache
+        if (!silent) {
+            const cached = CacheManager.load('balance');
+            if (cached) {
+                console.log('🔄 Usando dados do cache devido ao erro');
+                displayBalanceData(cached);
+                return;
+            }
+        }
+        
+        // Só mostra erro se não tem cache e não é silencioso
+        if (!silent) {
+            const isTimeout = error.name === 'AbortError';
+            const errorMsg = isTimeout ? 'Conexão lenta...' : 'Erro de conexão';
+            
+            if (balanceElement && balanceElement.textContent === 'Carregando...') {
+                balanceElement.textContent = errorMsg;
+            }
+            if (lastDonorElement && lastDonorElement.textContent === 'Carregando...') {
+                lastDonorElement.textContent = errorMsg;
+            }
+            if (topDonationElement && topDonationElement.textContent === 'Carregando...') {
+                topDonationElement.textContent = errorMsg;
+            }
+            
+            // Retry automático em caso de timeout
+            if (isTimeout) {
+                setTimeout(() => loadCurrentBalance(false), 3000);
+            }
+        }
     }
 }
 
-// 📜 Função para carregar histórico de doações
-async function loadDonationHistory() {
+// 📊 Função para exibir dados do saldo
+function displayBalanceData(data) {
+    const balanceElement = document.getElementById('current-balance');
+    const lastDonorElement = document.getElementById('last-donor');
+    const topDonationElement = document.getElementById('top-donation');
+    
+    // Atualiza saldo principal
+    if (balanceElement) {
+        const newBalance = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
+        balanceElement.textContent = newBalance;
+    }
+    
+    // Atualiza último doador
+    if (lastDonorElement) {
+        const lastDonor = data.last_donor && data.last_donor !== 'Doador Anônimo' ? 
+            (data.last_donor.length > 20 ? data.last_donor.substring(0, 20) + '...' : data.last_donor) : 
+            'Nenhum ainda';
+        lastDonorElement.textContent = lastDonor;
+    }
+    
+    // Atualiza maior doação
+    if (topDonationElement) {
+        const topDonation = data.top_amount > 0 ? 
+            `${data.top_donor.length > 15 ? data.top_donor.substring(0, 15) + '...' : data.top_donor} - R$ ${data.top_amount.toFixed(2).replace('.', ',')}` : 
+            'Nenhuma ainda';
+        topDonationElement.textContent = topDonation;
+    }
+}
+
+// 📜 Função para carregar histórico de doações (otimizada)
+async function loadDonationHistory(silent = false) {
     const historyContainer = document.getElementById('donation-history');
     
     try {
-        console.log('📜 Buscando histórico de doações...');
+        if (!silent) console.log('📜 Buscando histórico de doações...');
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
         
         const response = await fetch('/api/get-donation-history', {
             headers: {
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
-            }
+            },
+            signal: controller.signal
         });
         
-        console.log(`📡 History response status: ${response.status}`);
+        clearTimeout(timeoutId);
+        
+        if (!silent) console.log(`📡 History response status: ${response.status}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('📋 Dados de histórico recebidos:', data);
+        if (!silent) console.log('📋 Dados de histórico recebidos:', data);
         
-        if (data.success && data.history && Array.isArray(data.history) && data.history.length > 0) {
-            console.log(`📜 Encontradas ${data.history.length} doações no histórico`);
+        if (data.success && data.history && Array.isArray(data.history)) {
+            // Salva no cache
+            CacheManager.save('history', data.history);
             
-            // Verifica se cada item do histórico tem as propriedades necessárias
-            const validDonations = data.history.filter(donation => {
-                if (!donation || typeof donation !== 'object') {
-                    console.warn('⚠️ Item inválido no histórico:', donation);
-                    return false;
-                }
-                if (typeof donation.amount !== 'number' || donation.amount <= 0) {
-                    console.warn('⚠️ Item com valor inválido:', donation);
-                    return false;
-                }
-                if (!donation.donor_name) {
-                    console.warn('⚠️ Item sem nome do doador:', donation);
-                    return false;
-                }
-                if (!donation.timestamp) {
-                    console.warn('⚠️ Item sem timestamp:', donation);
-                    return false;
-                }
-                return true;
-            });
+            // Exibe os dados
+            displayHistoryData(data.history);
             
-            console.log(`✅ ${validDonations.length} doações válidas após filtro`);
-            
-            historyContainer.innerHTML = validDonations.map(donation => `
-                <div class="history-item">
-                    <div class="history-amount">R$ ${donation.amount.toFixed(2).replace('.', ',')}</div>
-                    <div class="history-donor">${donation.donor_name}</div>
-                    <div class="history-time">${formatTimestamp(donation.timestamp)}</div>
-                </div>
-            `).join('');
+            if (!silent) console.log(`✅ Histórico atualizado: ${data.history.length} doações`);
         } else {
-            console.log('📭 Nenhuma doação encontrada no histórico');
-            historyContainer.innerHTML = `
-                <div class="empty-history">
-                    <div class="empty-history-icon">📭</div>
-                    <p>Nenhuma doação ainda</p>
-                </div>
-            `;
+            throw new Error('Dados de histórico inválidos');
         }
+        
     } catch (error) {
         console.error('❌ Erro ao carregar histórico:', error);
+        
+        // Se não é um reload silencioso, tenta carregar do cache
+        if (!silent) {
+            const cached = CacheManager.load('history');
+            if (cached) {
+                console.log('🔄 Usando histórico do cache devido ao erro');
+                displayHistoryData(cached);
+                return;
+            }
+        }
+        
+        // Só mostra erro se não tem cache e não é silencioso
+        if (!silent) {
+            const isTimeout = error.name === 'AbortError';
+            const errorMsg = isTimeout ? 'Carregando histórico...' : 'Erro ao carregar histórico';
+            
+            historyContainer.innerHTML = `
+                <div class="empty-history">
+                    <div class="empty-history-icon">${isTimeout ? '⏳' : '❌'}</div>
+                    <p>${errorMsg}</p>
+                </div>
+            `;
+            
+            // Retry automático em caso de timeout
+            if (isTimeout) {
+                setTimeout(() => loadDonationHistory(false), 3000);
+            }
+        }
+    }
+}
+
+// 📊 Função para exibir dados do histórico
+function displayHistoryData(historyData) {
+    const historyContainer = document.getElementById('donation-history');
+    
+    if (!historyData || !Array.isArray(historyData) || historyData.length === 0) {
         historyContainer.innerHTML = `
             <div class="empty-history">
-                <div class="empty-history-icon">❌</div>
-                <p>Erro ao carregar histórico: ${error.message}</p>
+                <div class="empty-history-icon">📭</div>
+                <p>Nenhuma doação ainda</p>
             </div>
         `;
+        return;
     }
+    
+    // Verifica se cada item do histórico tem as propriedades necessárias
+    const validDonations = historyData.filter(donation => {
+        if (!donation || typeof donation !== 'object') {
+            console.warn('⚠️ Item inválido no histórico:', donation);
+            return false;
+        }
+        if (typeof donation.amount !== 'number' || donation.amount <= 0) {
+            console.warn('⚠️ Item com valor inválido:', donation);
+            return false;
+        }
+        if (!donation.donor_name) {
+            console.warn('⚠️ Item sem nome do doador:', donation);
+            return false;
+        }
+        if (!donation.timestamp) {
+            console.warn('⚠️ Item sem timestamp:', donation);
+            return false;
+        }
+        return true;
+    });
+    
+    historyContainer.innerHTML = validDonations.map(donation => `
+        <div class="history-item">
+            <div class="history-amount">R$ ${donation.amount.toFixed(2).replace('.', ',')}</div>
+            <div class="history-donor">${donation.donor_name}</div>
+            <div class="history-time">${formatTimestamp(donation.timestamp)}</div>
+        </div>
+    `).join('');
 }
 
 // 🕐 Função para formatar timestamp
@@ -279,21 +530,41 @@ document.getElementById('donation-form').addEventListener('submit', async (e) =>
         const data = await response.json();
         
         if (data.qr_code_base64) {
+            // Detecta se é dispositivo móvel
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            // Gera ID único para o textarea
+            const textareaId = `pix-code-${Date.now()}`;
+            
             // Exibe QR Code
             qrcodeEl.innerHTML = `
                 <h3>✅ PIX Gerado com Sucesso!</h3>
-                <p><strong>Doador:</strong> ${donorName}</p>
-                <p><strong>Valor:</strong> R$ ${amount.toFixed(2).replace('.', ',')}</p>
+                <p style="color: #ffffff; font-weight: 500;"><strong>Doador:</strong> ${donorName}</p>
+                <p style="color: #ffffff; font-weight: 500;"><strong>Valor:</strong> R$ ${amount.toFixed(2).replace('.', ',')}</p>
                 <img src="data:image/png;base64,${data.qr_code_base64}" style="max-width: 250px; margin: 10px 0;">
-                <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; margin-top: 10px;">
-                    <small><strong>PIX Copia e Cola:</strong></small><br>
-                    <textarea readonly style="width: 100%; height: 60px; font-size: 12px; margin-top: 5px;">${data.qr_code}</textarea>
+                <div class="pix-container">
+                    <div class="pix-header">
+                        <small><strong>📋 PIX Copia e Cola:</strong></small>
+                        <button id="copy-pix-btn" onclick="copyPixCode('${textareaId}')">
+                            📋 Copiar
+                        </button>
+                    </div>
+                    <textarea id="${textareaId}" readonly class="pix-textarea" style="color: #000000 !important;">${data.qr_code}</textarea>
+                    <div id="copy-status" class="pix-status"></div>
                 </div>
-                <p style="color: #666; font-size: 14px; margin-top: 10px;">
+                <p style="color: #ffffff; font-size: 14px; margin-top: 15px; font-weight: 500;">
                     💡 Após o pagamento, seu nome aparecerá automaticamente no display do ESP32!
                 </p>
+                ${isMobile ? '<p style="color: #ffffff; font-size: 13px; margin-top: 10px; font-weight: 500;">📱 <strong>PIX copiado automaticamente!</strong> Cole no seu app de pagamentos.</p>' : ''}
             `;
             qrcodeEl.style.display = 'block';
+            
+            // Cópia automática em dispositivos móveis
+            if (isMobile) {
+                setTimeout(() => {
+                    copyPixCode(textareaId, true);
+                }, 500);
+            }
             
             showStatus('🎯 Escaneie o QR Code ou use o PIX Copia e Cola para doar!', 'success');
             
@@ -331,10 +602,14 @@ function monitorPayment(paymentId, donorName) {
             if (data.status === 'approved') {
                 showStatus(`🎉 Pagamento confirmado! Obrigado, ${donorName}! Seu nome já aparece no ESP32!`, 'success');
                 
-                // Atualiza dados imediatamente
+                // Limpa cache para forçar atualização imediata
+                CacheManager.clear('balance');
+                CacheManager.clear('history');
+                
+                // Atualiza dados imediatamente (modo não-silencioso)
                 setTimeout(() => {
-                    loadCurrentBalance();
-                    loadDonationHistory();
+                    loadCurrentBalance(false);
+                    loadDonationHistory(false);
                 }, 2000);
                 
                 return;
@@ -356,4 +631,110 @@ function monitorPayment(paymentId, donorName) {
     };
     
     setTimeout(checkPayment, 5000); // Primeira verificação em 5 segundos
+}
+
+// 📋 Função para copiar PIX Copia e Cola
+function copyPixCode(textareaId, isAutomatic = false) {
+    const textarea = document.getElementById(textareaId);
+    const copyBtn = document.getElementById('copy-pix-btn');
+    const statusEl = document.getElementById('copy-status');
+    
+    if (!textarea) {
+        console.error('❌ Textarea do PIX não encontrado');
+        return;
+    }
+    
+    try {
+        // Método 1: Clipboard API (moderno)
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                showCopySuccess(copyBtn, statusEl, isAutomatic);
+            }).catch(() => {
+                // Fallback para método tradicional
+                fallbackCopy(textarea, copyBtn, statusEl, isAutomatic);
+            });
+        } else {
+            // Método 2: Fallback para navegadores antigos/inseguros
+            fallbackCopy(textarea, copyBtn, statusEl, isAutomatic);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao copiar PIX:', error);
+        showCopyError(copyBtn, statusEl);
+    }
+}
+
+// 📋 Método fallback para copiar texto
+function fallbackCopy(textarea, copyBtn, statusEl, isAutomatic) {
+    try {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // Para dispositivos móveis
+        
+        const successful = document.execCommand('copy');
+        
+        if (successful) {
+            showCopySuccess(copyBtn, statusEl, isAutomatic);
+        } else {
+            showCopyError(copyBtn, statusEl);
+        }
+        
+        // Remove seleção
+        if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro no fallback copy:', error);
+        showCopyError(copyBtn, statusEl);
+    }
+}
+
+// ✅ Mostra sucesso na cópia
+function showCopySuccess(copyBtn, statusEl, isAutomatic) {
+    if (copyBtn) {
+        copyBtn.innerHTML = '✅ Copiado!';
+        copyBtn.style.background = '#28a745';
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = '📋 Copiar';
+            copyBtn.style.background = '#007bff';
+        }, 2000);
+    }
+    
+    if (statusEl) {
+        statusEl.textContent = isAutomatic ? '✅ PIX copiado automaticamente!' : '✅ PIX copiado para área de transferência!';
+        statusEl.style.opacity = '1';
+        
+        setTimeout(() => {
+            statusEl.style.opacity = '0';
+        }, 3000);
+    }
+    
+    console.log('✅ PIX Copia e Cola copiado com sucesso');
+}
+
+// ❌ Mostra erro na cópia
+function showCopyError(copyBtn, statusEl) {
+    if (copyBtn) {
+        copyBtn.innerHTML = '❌ Erro';
+        copyBtn.style.background = '#dc3545';
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = '📋 Copiar';
+            copyBtn.style.background = '#007bff';
+        }, 2000);
+    }
+    
+    if (statusEl) {
+        statusEl.textContent = '❌ Erro ao copiar. Tente selecionar e copiar manualmente.';
+        statusEl.style.color = '#dc3545';
+        statusEl.style.opacity = '1';
+        
+        setTimeout(() => {
+            statusEl.style.opacity = '0';
+            statusEl.style.color = '#28a745';
+        }, 4000);
+    }
+    
+    console.error('❌ Erro ao copiar PIX Copia e Cola');
 }
