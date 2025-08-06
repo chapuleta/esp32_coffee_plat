@@ -170,6 +170,16 @@
             max-height: 60vh;
             overflow-y: auto;
             padding-right: 10px;
+            /* Melhorias de scroll */
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+        }
+        
+        /* Corrige problema do último item cortado */
+        .history-list::after {
+            content: '';
+            display: block;
+            height: 20px;
         }
         
         .history-item {
@@ -178,6 +188,13 @@
             align-items: center;
             padding: 15px;
             margin-bottom: 12px;
+            /* Remove capacidade de seleção */
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            /* Remove cursor de texto */
+            cursor: default;
             background: #f8f9fa;
             border-radius: 12px;
             border-left: 4px solid #27ae60;
@@ -742,6 +759,17 @@
             .container {
                 order: 1;
             }
+            
+            /* Melhoria no scroll mobile */
+            .history-list {
+                max-height: 200px;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Padding adicional no mobile para evitar corte */
+            .history-list::after {
+                height: 30px;
+            }
         }
     </style>
 </head>
@@ -822,6 +850,6 @@
             </div>
         </div>
     </div>
-    <script src="script-simple.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

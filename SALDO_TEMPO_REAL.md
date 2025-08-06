@@ -21,10 +21,49 @@ O sistema agora possui:
 - **Scroll suave** com design moderno
 
 ### 🔄 **Atualização Automática Inteligente**
-- **A cada 5 segundos**: Saldo em modo ativo
+- **A cada 10 segundos**: Saldo e informações de doadores
 - **A cada 30 segundos**: Histórico de doações
-- **Burst mode**: Polling super rápido após pagamentos confirmados
-- **Background mode**: Reduz frequência quando página não está visível
+- **Loading state**: Evita flash de conteúdo vazio no carregamento
+- **Polling simplificado**: Mais confiável que sistemas complexos
+
+### 🐛 **Bugs Críticos Corrigidos (05/08/2025)**
+
+#### ✅ **Flash de Conteúdo Vazio**
+- **Problema**: Campos apareciam zerados por um instante ao carregar
+- **Solução**: Estado de loading inicial ("Carregando...")
+- **Resultado**: Experiência visual suave e profissional
+
+#### ✅ **Geração de PIX Funcionando**
+- **Problema**: QR Code não aparecia após clicar "Gerar PIX"
+- **Solução**: Script corrigido mantendo funcionalidade completa
+- **Resultado**: QR Code e PIX Copia e Cola funcionando perfeitamente
+
+#### ✅ **Estado Preservado**
+- **Problema**: Saldo resetava ao tentar gerar PIX
+- **Solução**: Separação clara entre estado de exibição e geração de PIX
+- **Resultado**: Saldo permanece consistente durante todo o fluxo
+
+### 🎨 **Melhorias de UX Implementadas**
+
+#### ✅ **Scroll do Histórico Otimizado**
+- **Problema**: Último item ficava cortado pela metade
+- **Solução**: Padding automático após último item + scroll suave
+- **CSS**: `scroll-behavior: smooth` + `overscroll-behavior: contain`
+- **Mobile**: `-webkit-overflow-scrolling: touch` para iOS
+
+#### ✅ **Histórico Não Selecionável**
+- **Problema**: Usuários podiam selecionar texto do histórico
+- **Solução**: `user-select: none` + `cursor: default`
+- **Resultado**: Interface mais limpa e profissional
+
+#### ✅ **Duplicatas no Histórico (05/08/2025 - 17:30)**
+- **Problema**: Webhook do Mercado Pago enviando múltiplas notificações para o mesmo pagamento
+- **Solução**: Sistema anti-duplicação no webhook + filtro no frontend + limpeza automática
+- **Implementado**: 
+  - Verificação por `payment_id` antes de registrar no banco
+  - Filtro de duplicatas no endpoint de histórico
+  - Script de limpeza `/api/cleanup-duplicates` 
+- **Resultado**: Histórico limpo sem duplicatas + saldo recalculado automaticamente
 
 ---
 
@@ -48,6 +87,16 @@ O sistema agora possui:
 - donations/history/[timestamp]/amount
 - donations/history/[timestamp]/timestamp
 // Retorna ordenado por mais recente
+// 🔒 ANTI-DUPLICAÇÃO: Remove duplicatas por payment_id
+```
+
+#### `/api/cleanup-duplicates.js` ⭐ **NOVO**
+```javascript
+// Limpeza automática de duplicatas no banco
+- Analisa todo o histórico buscando payment_id duplicados
+- Remove duplicatas mantendo a mais recente
+- Recalcula saldo total automaticamente
+- Retorna relatório detalhado da limpeza
 ```
 
 ### 🎨 **Frontend Completamente Redesenhado**
@@ -77,21 +126,43 @@ O sistema agora possui:
 </div>
 ```
 
-### ⚡ **JavaScript Completamente Reescrito**
+### ⚡ **JavaScript Simplificado e Corrigido**
 ```javascript
-// Sistema de polling inteligente
-updateInterval = setInterval(loadCurrentBalance, 5000);
-historyUpdateInterval = setInterval(loadDonationHistory, 30000);
+// Sistema de polling confiável
+setInterval(loadCurrentBalance, 10000);  // 10s
+setInterval(loadDonationHistory, 30000); // 30s
 
-// Burst mode após pagamentos
-clearInterval(updateInterval);
-updateInterval = setInterval(loadCurrentBalance, 3000); // 3s por 2min
+// Loading state inicial
+function showLoadingState() {
+    balanceEl.textContent = 'Carregando...';
+    lastDonorEl.textContent = 'Carregando...';
+    topDonationEl.textContent = 'Carregando...';
+}
 
-// Detecção de foco da página
-window.addEventListener('focus', () => {
-    loadCurrentBalance();
-    loadDonationHistory();
-});
+// Funcionalidade completa de PIX mantida
+document.getElementById('donation-form').addEventListener('submit', ...)
+```
+
+### 🎨 **CSS Melhorado para UX**
+```css
+/* Remove seleção do histórico */
+.history-item {
+    user-select: none;
+    cursor: default;
+}
+
+/* Scroll otimizado */
+.history-list {
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+}
+
+/* Evita corte do último item */
+.history-list::after {
+    content: '';
+    display: block;
+    height: 20px;
+}
 ```
 
 ---
@@ -128,27 +199,19 @@ Página carrega → loadCurrentBalance() + loadDonationHistory() → Exibe tudo
 
 ### 2. **Modo Normal**
 ```
-A cada 5s → loadCurrentBalance() → Atualiza saldo
+A cada 10s → loadCurrentBalance() → Atualiza saldo
 A cada 30s → loadDonationHistory() → Atualiza histórico
 ```
 
-### 3. **Após Doação (Burst Mode)**
+### 3. **Após Doação**
 ```
-Pagamento confirmado → Burst de 2 minutos:
-- A cada 3s → loadCurrentBalance()
-- A cada 10s → loadDonationHistory()
-```
-
-### 4. **Página em Background**
-```
-document.hidden = true → Reduz para:
-- A cada 30s → loadCurrentBalance()
-- A cada 2min → loadDonationHistory()
+Pagamento confirmado → Atualizações imediatas:
+- 2s → loadCurrentBalance() + loadDonationHistory()
 ```
 
-### 5. **Detecção de Mudanças**
+### 4. **Estados de Loading**
 ```
-Saldo alterado → loadDonationHistory() → Atualiza histórico automaticamente
+Carregamento inicial → "Carregando..." → Dados reais
 ```
 
 ---

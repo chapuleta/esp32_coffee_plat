@@ -278,7 +278,30 @@ module.exports = async (req, res) => {
             console.log(`   - Documento: ${donorDocument ? donorDocument.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.**$4') : 'N/A'}`);
 
             if (status === 'approved') {
-                console.log(`✅ Pagamento aprovado! Processando automaticamente...`);
+                console.log(`✅ Pagamento aprovado! Verificando se já foi processado...`);
+                
+                // 🔒 VERIFICA SE JÁ EXISTE NO HISTÓRICO (ANTI-DUPLICAÇÃO)
+                const existingHistoryRef = db.ref('donations/history')
+                    .orderByChild('payment_id')
+                    .equalTo(paymentId);
+                
+                const existingSnapshot = await existingHistoryRef.once('value');
+                const existingData = existingSnapshot.val();
+                
+                if (existingData) {
+                    console.log(`⚠️ Pagamento ${paymentId} já foi processado anteriormente!`);
+                    console.log(`🔍 Dados existentes:`, Object.values(existingData)[0]);
+                    
+                    return res.status(200).json({
+                        message: 'Webhook já processado anteriormente (duplicata evitada)',
+                        payment_id: paymentId,
+                        status: status,
+                        already_processed: true,
+                        processed_at: new Date().toISOString()
+                    });
+                }
+                
+                console.log(`🆕 Novo pagamento confirmado! Processando automaticamente...`);
                 
                 // Atualiza o status do pagamento para o ESP32 detectar
                 const paymentStatusRef = db.ref('payment_status/status');

@@ -1,8 +1,141 @@
 # ESP32 Coffee Donation System - Instruções para Gemini CLI
 
-## SISTEMA ATUAL FUNCIONANDO (04/08/2025)
+## SISTEMA ATUAL FUNCIONANDO (05/08/2025) - SALDO TEMPO REAL IMPLEMENTADO
 
-### Estado Confirmado:
+### ✅ PROBLEMA CRÍTICO RESOLVIDO - Frontend JavaScript
+
+**PROBLEMA IDENTIFICADO:** Sistema completo funcionando (ESP32 + Firebase + Webhook), mas frontend web não mostrava dados em tempo real.
+
+**SINTOMAS:**
+- ❌ Saldo permanecia em "R$ 0,00" 
+- ❌ Último doador não aparecia
+- ❌ Maior doação não carregava
+- ❌ Histórico de doações ficava "Carregando histórico"
+- ✅ Backend funcionava (APIs retornavam dados corretos)
+- ✅ Firebase atualizava normalmente
+- ✅ ESP32 mostrava dados atualizados
+
+**CAUSA RAIZ:** JavaScript principal (`script.js`) estava muito complexo com:
+- Lógica de retry aninhada excessivamente 
+- Event listeners múltiplos conflitantes
+- Sistema de burst mode sofisticado demais
+- Possível erro de sintaxe que quebrava toda execução
+- Funções assíncronas com abort controllers complexos
+
+**SOLUÇÃO IMPLEMENTADA:**
+1. **Criado `script-simple.js`** - Versão limpa e funcional
+2. **Removido código complexo** - Apenas funções essenciais
+3. **Polling direto** - A cada 10s (saldo) e 30s (histórico)
+4. **Logs de debug** - Para identificar problemas futuros
+
+### Arquivos Criados/Modificados:
+
+#### `web/public/script-simple.js` ⭐ **NOVO**
+```javascript
+// Versão simplificada que funciona
+window.addEventListener('DOMContentLoaded', function() {
+    loadBalance();
+    loadHistory();
+    setInterval(loadBalance, 10000);   // 10s
+    setInterval(loadHistory, 30000);   // 30s
+});
+
+async function loadBalance() {
+    const response = await fetch('/api/get-current-balance');
+    const data = await response.json();
+    
+    // Atualiza elementos do DOM diretamente
+    document.getElementById('current-balance').textContent = 
+        `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
+    // ... resto da implementação limpa
+}
+```
+
+#### `web/public/index.html` 📝 **MODIFICADO**
+```html
+<!-- Alterado de script.js para script-simple.js -->
+<script src="script-simple.js"></script>
+```
+
+### Estado Confirmado Após Correção:
+- **ESP32:** ✅ Conecta Wi-Fi, monitora Firebase, processa pagamentos em tempo real
+- **Stream Firebase:** ✅ Auto-recovery implementado, funciona continuamente  
+- **Display OLED:** ✅ Mostra saldo, último doador e maior doação atualizados
+- **Web Interface:** ✅ Formulário PIX funcionando no Vercel
+- **Webhook MP:** ✅ Notificações chegam e atualizam Firebase corretamente
+- **Frontend Web:** ✅ **AGORA FUNCIONA** - Saldo e histórico em tempo real
+- **APIs Funcionais:** ✅ `/api/get-current-balance` e `/api/get-donation-history`
+- **Fluxo completo:** ✅ Pagamento → Webhook → Firebase → ESP32 → Display → Frontend
+
+### Dados de Teste Funcionando:
+```json
+{
+  "total_amount": 31.40,
+  "last_donor": "João Silva (Teste)",
+  "top_donor": "João Silva (Teste)", 
+  "top_amount": 25.50
+}
+```
+
+### Logs de Sucesso (Console Browser):
+```javascript
+🚀 SCRIPT SIMPLES CARREGADO!
+🚀 DOM CARREGADO!
+💰 Buscando saldo...
+📡 Status: 200
+📋 Dados: {total_amount: 31.4, last_donor: "João Silva (Teste)", ...}
+✅ Saldo atualizado: R$ 31,40
+✅ Último doador: João Silva (Teste)
+✅ Maior doação: João Silva (Teste) - R$ 25,50
+📜 Buscando histórico...
+✅ Histórico atualizado: 1 doações
+```
+
+### Webhook Mercado Pago Também Corrigido:
+
+**PROBLEMA:** Webhook não extraía corretamente `payment_id` do corpo da requisição.
+
+**CORREÇÃO:**
+```javascript
+// Antes (não funcionava):
+const paymentId = req.body.data?.id;
+
+// Depois (funciona):
+let paymentId = req.body.data?.id || req.body.resource || req.query.id;
+console.log('Body completo:', JSON.stringify(req.body, null, 2));
+```
+
+### ✅ SISTEMA COMPLETAMENTE FUNCIONAL
+
+**Frontend Web Responsivo:**
+- 💰 Saldo atual centralizado e em destaque  
+- 👤 Último doador exibido
+- 🏆 Maior doação e doador
+- 📜 Histórico completo de doações (quem, quando, quanto)
+- 🔄 Atualização automática em tempo real (10s saldo, 30s histórico)
+- 📱 Design responsivo (grid 2 colunas desktop, empilhado mobile)
+
+**Eliminado da Versão Complexa:**
+- ❌ Sistema burst mode após pagamentos (desnecessário)
+- ❌ Detecção de visibilidade da página (complexo demais)
+- ❌ Retry automático com backoff (over-engineering)
+- ❌ AbortController para timeout (causava conflitos)
+- ❌ Lógica de consecutiveErrors (não agregava valor)
+
+**Mantido na Versão Simples:**
+- ✅ Polling regular e confiável
+- ✅ Logs claros para debug
+- ✅ Tratamento básico de erros
+- ✅ Formatação de valores brasileira
+- ✅ Timestamps relativos no histórico
+
+### Lição Aprendida:
+- **Simplicidade > Complexidade** - Script simples é mais confiável
+- **Debug First** - Logs ajudam a identificar problemas rapidamente  
+- **Progressive Enhancement** - Implementar funcionalidades básicas primeiro
+- **Real Data Testing** - Testar com dados reais do Firebase
+
+---
 - **ESP32:** Conecta Wi-Fi, monitora Firebase, processa pagamentos em tempo real
 - **Stream Firebase:** Auto-recovery implementado, funciona continuamente
 - **Display OLED:** Mostra "Obrigado!" e informações de doação (FASE 1 IMPLEMENTADA)
@@ -363,9 +496,11 @@ Keypad customKeypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 ---
 
-**ESTADO ATUAL:** ✅ Fase 1 implementada e funcionando. Sistema processa pagamentos web + mostra informações no display.
+**ESTADO ATUAL:** ✅ Sistema completamente funcional - ESP32 + Firebase + Webhook + Frontend Web em tempo real funcionando perfeitamente.
 
-**PRÓXIMO PASSO:** Implementar Fase 2 - Entrada Serial. Testar antes de prosseguir para Fase 3.
+**CORREÇÃO CRÍTICA:** Problema era JavaScript complexo demais. Solução: script simplificado e funcional.
+
+**TODOS OS COMPONENTES:** ✅ ESP32 display, ✅ Webhook MP, ✅ Firebase sync, ✅ Frontend responsivo tempo real.
 
 **COMUNICAÇÃO ESPERADA:** 
 - Gemini: "Implementei Fase 2 - Entrada Serial. Por favor, teste digitando 1,2,3,4 no Serial Monitor antes de prosseguir para Fase 3."

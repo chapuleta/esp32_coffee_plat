@@ -44,6 +44,7 @@ module.exports = async (req, res) => {
         const donations = Object.keys(historyData)
             .map(key => ({
                 id: key,
+                payment_id: historyData[key].payment_id || key, // usa payment_id como identificador único
                 donor_name: historyData[key].donor_name || 'Doador Anônimo',
                 amount: parseFloat(historyData[key].amount || 0),
                 timestamp: historyData[key].timestamp || Date.now(),
@@ -52,13 +53,27 @@ module.exports = async (req, res) => {
             .filter(donation => donation.amount > 0) // Remove doações com valor 0
             .sort((a, b) => b.timestamp - a.timestamp);
         
-        console.log(`✅ Encontradas ${donations.length} doações no histórico`);
-        console.log('📜 Primeiras 3 doações:', donations.slice(0, 3));
+        // 🔒 REMOVE DUPLICATAS por payment_id (anti-duplicação no frontend)
+        const uniqueDonations = [];
+        const seenPaymentIds = new Set();
+        
+        for (const donation of donations) {
+            if (!seenPaymentIds.has(donation.payment_id)) {
+                seenPaymentIds.add(donation.payment_id);
+                uniqueDonations.push(donation);
+            } else {
+                console.log(`⚠️ Duplicata removida: ${donation.payment_id} - ${donation.donor_name} - R$ ${donation.amount}`);
+            }
+        }
+        
+        console.log(`✅ Encontradas ${donations.length} doações no histórico (${uniqueDonations.length} únicas após filtro)`);
+        console.log('📜 Primeiras 3 doações:', uniqueDonations.slice(0, 3));
         
         res.status(200).json({
             success: true,
-            history: donations,
-            total_count: donations.length
+            history: uniqueDonations,
+            total_count: uniqueDonations.length,
+            total_raw: donations.length
         });
         
     } catch (error) {

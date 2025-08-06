@@ -4,6 +4,9 @@ console.log('🚀 SCRIPT SIMPLES CARREGADO!');
 window.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 DOM CARREGADO!');
     
+    // Mostra loading state inicial
+    showLoadingState();
+    
     // Função simples para carregar saldo
     loadBalance();
     loadHistory();
@@ -12,6 +15,16 @@ window.addEventListener('DOMContentLoaded', function() {
     setInterval(loadBalance, 10000);
     setInterval(loadHistory, 30000);
 });
+
+function showLoadingState() {
+    const balanceEl = document.getElementById('current-balance');
+    const lastDonorEl = document.getElementById('last-donor');
+    const topDonationEl = document.getElementById('top-donation');
+    
+    if (balanceEl) balanceEl.textContent = 'Carregando...';
+    if (lastDonorEl) lastDonorEl.textContent = 'Carregando...';
+    if (topDonationEl) topDonationEl.textContent = 'Carregando...';
+}
 
 async function loadBalance() {
     console.log('💰 Buscando saldo...');
