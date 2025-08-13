@@ -1,5 +1,6 @@
 #define ENABLE_DATABASE
 #define ENABLE_USER_AUTH
+#define BUTTON_PIN 4 // Pino do botão. Mude se necessário.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -11,15 +12,25 @@
 
 // Other Peripheral Includes
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_PCD8544.h> // Nokia 5110 LCD library
+#include <SPI.h>              // For Nokia 5110 LCD
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
+#include <qrcodegen.hpp>
+
+// Nokia 5110 LCD Pin Definitions (from GEMINI.md)
+#define SCLK_PIN 18
+#define DIN_PIN 23
+#define DC_PIN 19
+#define CS_PIN 5
+#define RST_PIN 14
 
 // --- Function Prototypes ---
 void printOLED(const String& message, int textSize = 1, bool clear = true);
+String removeAccents(String input); // New prototype
 void streamCallback(AsyncResult &aResult);
 void setupFirebase();
 String saldoHtml();
@@ -28,9 +39,14 @@ void handleLogin();
 void handleSetSaldo();
 void startWebServer();
 void readDonationData();
-void displayInfo();
 void checkDataUpdateComplete();
-void checkForDataUpdates(); // Nova função para verificar mudanças periodicamente
+void updateDisplay();
+void updateMarqueeText();
+void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& lastScrollTimeVar, int yPos);
+void displayQRCode();
+void onButtonPress();
+String extractFirstTwoNames(String fullName);
+
 
 // --- Global Objects ---
 
@@ -41,8 +57,8 @@ FirebaseApp app;
 RealtimeDatabase Database;
 UserAuth *user_auth = nullptr;
 
-// Display OLED
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// Display Nokia 5110
+Adafruit_PCD8544 display = Adafruit_PCD8544(SCLK_PIN, DIN_PIN, DC_PIN, CS_PIN, RST_PIN);
 
 // NTP (Time)
 WiFiUDP ntpUDP;
@@ -56,23 +72,160 @@ Preferences preferences;
 String totalAmount = "0.00";
 String lastDonor = "Nenhum ainda";
 String topDonor = "Nenhum ainda";
+float topAmount = 0.0;
 bool dataLoaded = false; // Flag para evitar leituras múltiplas
-int dataUpdatesReceived = 0; // Contador para saber quando todas as 3 leituras terminaram
-unsigned long lastDataCheck = 0; // Timestamp da última verificação de dados
-const unsigned long DATA_CHECK_INTERVAL = 10000; // Verifica a cada 10 segundos
+int dataUpdatesReceived = 0; // Contador para saber quando todas as leituras terminaram
 
-// --- OLED Display Functions ---
+// Display State
+bool showingQR = false;
+unsigned long qrStartTime = 0;
+String marqueeTextLine1 = "";
+String marqueeTextLine2 = "";
+int scrollPositionLine1 = 0;
+int scrollPositionLine2 = 0;
+unsigned long lastScrollTimeLine1 = 0;
+unsigned long lastScrollTimeLine2 = 0;
+const int SCROLL_DELAY = 200; // ms
+const int QR_DISPLAY_TIME = 30000; // 30s
+
+// --- Nokia 5110 Display Functions ---
 
 void printOLED(const String& message, int textSize, bool clear) {
   if (clear) {
     display.clearDisplay();
   }
   display.setTextSize(textSize);
-  display.setTextColor(SSD1306_WHITE);
+  display.setTextColor(BLACK); // Changed from SSD1306_WHITE to BLACK for Nokia 5110
   display.setCursor(0, 0);
-  display.println(message);
+  display.print(removeAccents(message)); // Changed from println to print to avoid line breaks
   display.display();
 }
+
+// New function to remove accents
+String removeAccents(String input) {
+    input.replace("á", "a"); input.replace("Á", "A");
+    input.replace("é", "e"); input.replace("É", "E");
+    input.replace("í", "i"); input.replace("Í", "I");
+    input.replace("ó", "o"); input.replace("Ó", "O");
+    input.replace("ú", "u"); input.replace("Ú", "U");
+    input.replace("â", "a"); input.replace("Â", "A");
+    input.replace("ê", "e"); input.replace("Ê", "E");
+    input.replace("ô", "o"); input.replace("Ô", "O");
+    input.replace("ç", "c"); input.replace("Ç", "C");
+    input.replace("ã", "a"); input.replace("Ã", "A");
+    input.replace("õ", "o"); input.replace("Õ", "O");
+    return input;
+}
+
+String extractFirstTwoNames(String fullName) {
+    int firstSpace = fullName.indexOf(' ');
+    if (firstSpace == -1) return fullName;
+    
+    int secondSpace = fullName.indexOf(' ', firstSpace + 1);
+    if (secondSpace == -1) return fullName;
+    
+    return fullName.substring(0, secondSpace);
+}
+
+void updateMarqueeText() {
+    String topDonorShort = removeAccents(extractFirstTwoNames(topDonor)); // Applied removeAccents
+    String lastDonorShort = removeAccents(extractFirstTwoNames(lastDonor)); // Applied removeAccents
+    
+    // Split into two lines
+    marqueeTextLine1 = removeAccents("Maior doador: ") + topDonorShort + removeAccents(" (R$") + String(topAmount, 2) + ")     "; // Applied removeAccents
+    marqueeTextLine2 = removeAccents("Ultimo doador: ") + lastDonorShort + "     "; // Applied removeAccents
+}
+
+// Generic scrolling function
+void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& lastScrollTimeVar, int yPos) {
+    if (millis() - lastScrollTimeVar >= SCROLL_DELAY) {
+        scrollPos++;
+        // 6 pixels de largura por caractere (default font size 1)
+        if (scrollPos >= textToScroll.length() * 6) { 
+            scrollPos = 0;
+        }
+        lastScrollTimeVar = millis();
+    }
+    
+    // Limpa apenas a região específica desta linha (altura de 8 pixels para font size 1)
+    display.fillRect(0, yPos, display.width(), 8, WHITE);
+    
+    // Define posição e configurações apenas para esta linha
+    display.setTextSize(1);
+    display.setTextColor(BLACK);
+    display.setCursor(-scrollPos, yPos);
+    display.print(textToScroll);
+}
+
+void displayQRCode() {
+    display.clearDisplay();
+    
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(
+        "https://webhook-coffee.vercel.app",
+        qrcodegen::QrCode::Ecc::MEDIUM_ECC
+    );
+    
+    int size = qr.getSize();
+    int scale = min((display.width()-10) / size, (display.height()-10) / size);
+    int offsetX = (display.width() - size * scale) / 2;
+    int offsetY = (display.height() - size * scale) / 2;
+    
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            if (qr.getModule(x, y)) {
+                display.fillRect(offsetX + x * scale, offsetY + y * scale,
+                               scale, scale, BLACK); // Changed from SSD1306_WHITE to BLACK
+            }
+        }
+    }
+    
+    display.display();
+}
+
+void onButtonPress() {
+    if (!showingQR) {
+      Serial.println("Botão pressionado! Exibindo QR Code.");
+      showingQR = true;
+      qrStartTime = millis();
+      displayQRCode();
+    }
+}
+
+void updateDisplay() {
+    if (showingQR) {
+        if (millis() - qrStartTime >= QR_DISPLAY_TIME) {
+            showingQR = false;
+            scrollPositionLine1 = 0; // Reset scroll for both lines
+            scrollPositionLine2 = 0;
+        } else {
+            // QR já está na tela, não faz nada
+            return;
+        }
+    }
+    
+    // Layout simples e limpo
+    display.clearDisplay();
+    
+    // Linha 0: Instrução fixa (sem rolagem)
+    display.setTextSize(1);
+    display.setTextColor(BLACK);
+    display.setCursor(0, 0);
+    display.print("Botao = QR");
+    
+    // Prepara strings para rolagem
+    String topDonorShort = extractFirstTwoNames(topDonor);
+    String topLine = "Top: " + removeAccents(topDonorShort) + " (R$" + String(topAmount, 2) + ")     ";
+    
+    String lastDonorShort = extractFirstTwoNames(lastDonor);
+    String lastLine = "Ult: " + removeAccents(lastDonorShort) + "     ";
+    
+    // Linhas com rolagem
+    displayScrollingLine(topLine, scrollPositionLine1, lastScrollTimeLine1, 12);
+    displayScrollingLine(lastLine, scrollPositionLine2, lastScrollTimeLine2, 30);
+    
+    display.display();
+}
+
 
 // --- Firebase Functions ---
 
@@ -82,181 +235,60 @@ void readDonationData() {
     return;
   }
   
+  dataUpdatesReceived = 0;
   Serial.println("=== INICIANDO LEITURA DOS DADOS ===");
-  
-  // Primeiro, vamos ler todo o nó donations para ver o que existe
-  Database.get(*aClient, "/donations", [](AsyncResult &aResult) {
-    if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String allData = dbResult.to<String>();
-      Serial.printf("🔍 TODOS OS DADOS EM /donations: '%s'\n", allData.c_str());
-    } else {
-      Serial.println("❌ Erro ao ler /donations completo");
-    }
-  }, false, "readAll");
   
   Database.get(*aClient, "/donations/total_amount", [](AsyncResult &aResult) {
     if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      Serial.printf("Raw total_amount: '%s'\n", rawValue.c_str());
-      
-      if (rawValue.length() > 0) {
-        totalAmount = rawValue;
-        Serial.printf("✅ Total amount updated: %s\n", totalAmount.c_str());
-      } else {
-        Serial.println("❌ Total amount está vazio no Firebase");
-      }
-      checkDataUpdateComplete(); // Verifica se pode atualizar display
+      totalAmount = removeAccents(aResult.to<RealtimeDatabaseResult>().to<String>()); // Applied removeAccents
+      Serial.printf("✅ Total amount updated: %s\n", totalAmount.c_str());
     } else {
       Serial.printf("❌ Erro ao ler total_amount: %s\n", aResult.uid().c_str());
-      checkDataUpdateComplete(); // Conta mesmo se houver erro
     }
+    checkDataUpdateComplete();
   }, false, "readTotal");
   
   Database.get(*aClient, "/donations/last_donor", [](AsyncResult &aResult) {
     if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      Serial.printf("Raw last_donor: '%s'\n", rawValue.c_str());
-      
-      if (rawValue.length() > 0) {
-        lastDonor = rawValue;
-        lastDonor.replace("\"", ""); // Remove aspas se existirem
-        Serial.printf("✅ Last donor updated: %s\n", lastDonor.c_str());
-      } else {
-        Serial.println("❌ Last donor está vazio no Firebase");
-      }
-      checkDataUpdateComplete(); // Verifica se pode atualizar display
-    } else {
-      Serial.printf("❌ Erro ao ler last_donor: %s\n", aResult.uid().c_str());
-      checkDataUpdateComplete(); // Conta mesmo se houver erro
+      lastDonor = removeAccents(aResult.to<RealtimeDatabaseResult>().to<String>()); // Applied removeAccents
+      Serial.printf("✅ Last donor updated: %s\n", lastDonor.c_str());
     }
+    else {
+      Serial.printf("❌ Erro ao ler last_donor: %s\n", aResult.uid().c_str());
+    }
+    checkDataUpdateComplete();
   }, false, "readLast");
   
   Database.get(*aClient, "/donations/top_donor", [](AsyncResult &aResult) {
     if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      Serial.printf("Raw top_donor: '%s'\n", rawValue.c_str());
-      
-      if (rawValue.length() > 0) {
-        topDonor = rawValue;
-        topDonor.replace("\"", ""); // Remove aspas se existirem
-        Serial.printf("✅ Top donor updated: %s\n", topDonor.c_str());
-      } else {
-        Serial.println("❌ Top donor está vazio no Firebase");
-      }
-      checkDataUpdateComplete(); // Verifica se pode atualizar display
-    } else {
-      Serial.printf("❌ Erro ao ler top_donor: %s\n", aResult.uid().c_str());
-      checkDataUpdateComplete(); // Conta mesmo se houver erro
+      topDonor = removeAccents(aResult.to<RealtimeDatabaseResult>().to<String>()); // Applied removeAccents
+      Serial.printf("✅ Top donor updated: %s\n", topDonor.c_str());
     }
+    else {
+      Serial.printf("❌ Erro ao ler top_donor: %s\n", aResult.uid().c_str());
+    }
+    checkDataUpdateComplete();
   }, false, "readTop");
-  
-  Serial.println("=== SOLICITAÇÕES DE LEITURA ENVIADAS ===");
+
+  Database.get(*aClient, "/donations/top_amount", [](AsyncResult &aResult) {
+    if (aResult.isResult()) {
+      topAmount = aResult.to<RealtimeDatabaseResult>().to<float>();
+      Serial.printf("✅ Top amount updated: %.2f\n", topAmount);
+    } else {
+      Serial.printf("❌ Erro ao ler top_amount: %s\n", aResult.uid().c_str());
+    }
+    checkDataUpdateComplete();
+  }, false, "readTopAmount");
 }
 
 void checkDataUpdateComplete() {
   dataUpdatesReceived++;
-  Serial.printf("📊 Updates recebidos: %d/3\n", dataUpdatesReceived);
+  Serial.printf("📊 Updates recebidos: %d/4\n", dataUpdatesReceived);
   
-  if (dataUpdatesReceived >= 3) {
-    Serial.println("🎉 Todos os dados carregados! Atualizando display...");
-    displayInfo();
-    dataUpdatesReceived = 0; // Reset para próximas leituras
+  if (dataUpdatesReceived >= 4) {
+    Serial.println("🎉 Todos os dados carregados!");
+    dataUpdatesReceived = 0; // Reset
   }
-}
-
-void checkForDataUpdates() {
-  // Só verifica se passou o intervalo de tempo
-  if (millis() - lastDataCheck < DATA_CHECK_INTERVAL) {
-    return;
-  }
-  
-  lastDataCheck = millis();
-  Serial.println("🔄 Verificando atualizações nos dados de doações...");
-  
-  // Resetar o contador para não interferir com o display
-  dataUpdatesReceived = 0;
-  
-  // Lê apenas uma vez para comparar com os dados atuais
-  Database.get(*aClient, "/donations/total_amount", [](AsyncResult &aResult) {
-    if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      rawValue.replace("\"", "");
-      
-      if (rawValue.length() > 0 && rawValue != totalAmount) {
-        Serial.printf("💰 Total amount mudou de %s para %s\n", totalAmount.c_str(), rawValue.c_str());
-        totalAmount = rawValue;
-        displayInfo();
-      }
-    }
-  }, false, "checkTotal");
-  
-  Database.get(*aClient, "/donations/last_donor", [](AsyncResult &aResult) {
-    if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      rawValue.replace("\"", "");
-      
-      if (rawValue.length() > 0 && rawValue != lastDonor) {
-        Serial.printf("👤 Last donor mudou de %s para %s\n", lastDonor.c_str(), rawValue.c_str());
-        lastDonor = rawValue;
-        displayInfo();
-      }
-    }
-  }, false, "checkLast");
-  
-  Database.get(*aClient, "/donations/top_donor", [](AsyncResult &aResult) {
-    if (aResult.isResult()) {
-      RealtimeDatabaseResult &dbResult = aResult.to<RealtimeDatabaseResult>();
-      String rawValue = dbResult.to<String>();
-      rawValue.replace("\"", "");
-      
-      if (rawValue.length() > 0 && rawValue != topDonor) {
-        Serial.printf("🏆 Top donor mudou de %s para %s\n", topDonor.c_str(), rawValue.c_str());
-        topDonor = rawValue;
-        displayInfo();
-      }
-    }
-  }, false, "checkTop");
-}
-
-void displayInfo() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  
-  // Primeira linha: Saldo (maior)
-  display.setTextSize(2);
-  display.setCursor(0, 0);
-  display.print("R$ ");
-  display.println(totalAmount);
-  
-  // Voltar para tamanho normal
-  display.setTextSize(1);
-  
-  // Segunda linha: Maior doador
-  display.setCursor(0, 20);
-  display.print("Maior: ");
-  display.println(topDonor.substring(0, 15)); // Mais caracteres
-  
-  // Terceira linha: Último doador
-  display.setCursor(0, 30);
-  display.print("Ultimo: ");
-  display.println(lastDonor.substring(0, 14)); // Mais caracteres
-  
-  // Quarta linha: Call to action
-  display.setCursor(0, 45);
-  display.println("Doe via formulario web");
-  
-  // Quinta linha: Status
-  display.setCursor(0, 55);
-  display.println("Sistema ativo");
-  
-  display.display();
 }
 
 void streamCallback(AsyncResult &aResult) {
@@ -266,67 +298,39 @@ void streamCallback(AsyncResult &aResult) {
     if (aResult.isEvent()) {
         Serial.printf("Event: %s, Message: %s, Code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
         
-        // Quando a autenticação estiver pronta, lê os dados das doações
         if (aResult.eventLog().code() == 10 && aResult.uid() == "authTask" && !dataLoaded) {
             Serial.println("🎉 Firebase autenticado! Lendo dados das doações...");
-            dataLoaded = true; // Marca que já carregou para evitar repetições
-            delay(1000); // Pequena pausa para garantir que está tudo configurado
+            dataLoaded = true;
+            delay(1000);
             readDonationData();
         }
     }
 
     if (aResult.available()) {
         RealtimeDatabaseResult &stream = aResult.to<RealtimeDatabaseResult>();
-        Serial.printf("Stream Data Path: %s\n", stream.dataPath().c_str());
-        Serial.printf("Stream Value: %s\n", stream.to<String>().c_str());
-        Serial.printf("Is Stream: %s\n", stream.isStream() ? "true" : "false");
-        Serial.printf("Stream Type: %d\n", stream.type());
-        Serial.printf("Stream Task ID: %s\n", aResult.uid().c_str());
         
-        // Processa mudanças no payment_status
         if (aResult.uid() == "streamTask" && stream.isStream() && (stream.dataPath() == "/" || stream.dataPath() == "/status")) {
-            String dataValue = stream.to<String>();
             String status = "";
-            
-            // Se o path é "/status", o valor direto é o status
             if (stream.dataPath() == "/status") {
-                status = dataValue;
-                status.replace("\"", ""); // Remove aspas se existirem
-                Serial.printf("Status direto recebido: %s\n", status.c_str());
-            } 
-            // Se o path é "/", precisa fazer parse JSON
-            else if (stream.dataPath() == "/") {
+                status = stream.to<String>();
+            } else if (stream.dataPath() == "/") {
                 JsonDocument doc;
-                DeserializationError error = deserializeJson(doc, dataValue);
-                
-                if (!error) {
+                if (deserializeJson(doc, stream.to<String>()) == DeserializationError::Ok) {
                     status = doc["status"].as<String>();
-                    Serial.printf("Status extraído do JSON: %s\n", status.c_str());
-                } else {
-                    Serial.printf("Erro no JSON parse: %s\n", error.f_str());
-                    return;
                 }
             }
             
-            // Processa o status aprovado
             if (status == "approved") {
                 Serial.println("Donation approved! Processing...");
                 printOLED("Obrigado!", 2, true);
                 delay(2000);
-                displayInfo(); // Usa nova função em vez de printOLED
+                readDonationData(); // Atualiza todos os dados
                 
                 if (aClient) {
-                    Serial.println("Atualizando status para 'processed'...");
                     Database.set<String>(*aClient, "/payment_status/status", "processed");
-                    
-                    // CRÍTICO: Reinicia o stream para escutar próximos pagamentos
-                    Serial.println("Reiniciando stream para próximos pagamentos...");
-                    delay(1000); // Pequena pausa para garantir que a atualização foi enviada
+                    delay(1000);
                     Database.get(*aClient, "/payment_status", streamCallback, true, "streamTask");
                 }
-            }
-            else if (status == "processed") {
-                Serial.println("Status já processado, aguardando próximo pagamento...");
             }
         }
     }
@@ -342,27 +346,19 @@ void setupFirebase() {
   
   user_auth = new UserAuth(FIREBASE_API_KEY, FIREBASE_USER_EMAIL, FIREBASE_USER_PASSWORD);
 
-  Serial.println("Inicializando Firebase App...");
   initializeApp(*aClient, app, getAuth(*user_auth), streamCallback, "authTask");
   
-  Serial.println("Configurando Realtime Database...");
   app.getApp<RealtimeDatabase>(Database);
   Database.url(FIREBASE_HOST);
 
-  // Primeiro, reseta o status para garantir estado limpo
-  Serial.println("Resetando status para estado inicial...");
   Database.set<String>(*aClient, "/payment_status/status", "waiting");
-  
-  delay(2000); // Aguarda a escrita ser processada
-  
-  Serial.println("Iniciando stream de monitoramento...");
+  delay(1000);
   Database.get(*aClient, "/payment_status", streamCallback, true, "streamTask");
   
   Serial.println("Firebase configurado com sucesso!");
 }
 
 // --- Web Server Functions ---
-
 const char* login_username = "admin";
 const char* login_password = "senha123";
 
@@ -422,16 +418,16 @@ void startWebServer() {
 void setup() {
   Serial.begin(115200);
   preferences.begin("coffee-app", false);
+  
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // Init OLED
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("Falha na alocacao do SSD1306"));
-    for (;;);
-  }
+  display.begin(); // Initialize PCD8544
+  display.setContrast(55); // Set contrast for Nokia 5110
+  // No error check for begin() as it doesn't return a boolean for PCD8544
   printOLED("Conectando...", 1, true);
 
   // Connect to Wi-Fi
-  Serial.print("Conectando ao Wi-Fi...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -444,13 +440,11 @@ void setup() {
   delay(2000);
 
   // Sync Time
-  Serial.println("Sincronizando hora com NTP...");
   timeClient.begin();
   while(!timeClient.update()) {
     timeClient.forceUpdate();
   }
   Serial.println("Hora sincronizada.");
-  Serial.println(timeClient.getFormattedTime());
 
   // Start Services
   setupFirebase();
@@ -461,9 +455,13 @@ void loop() {
   app.loop();
   server.handleClient();
   
-  // Verifica mudanças nos dados de doação periodicamente
-  if (aClient && dataLoaded) {
-    checkForDataUpdates();
+  if (digitalRead(BUTTON_PIN) == HIGH) { // Changed from LOW to HIGH
+    onButtonPress();
+    delay(200); // Debounce
+  }
+  
+  if (dataLoaded) {
+    updateDisplay();
   }
   
   delay(10);

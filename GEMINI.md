@@ -259,6 +259,175 @@ Adicionar no `include/config.h`:
 
 ## PRÓXIMA IMPLEMENTAÇÃO - FASE 2 OBRIGATÓRIA
 
+### ESPECIFICAÇÃO DO DISPLAY - Letreiro Rotativo com QR Code
+
+#### Layout Principal (Tela Padrão):
+```
+┌──────────────────────────────────────┐
+│ Aperte o botão para gerar o QRCode!  │ <- Topo fixo
+├──────────────────────────────────────┤
+│                                      │
+│ Maior doador: João Victor (R$50)     │ <- Letreiro rotativo
+│ |  Último doador: Gabriel Tozzato    │ <- Continua na mesma linha
+│                                      │
+└──────────────────────────────────────┘
+```
+
+#### Comportamento do Display:
+
+**1. Tela Inicial (Modo Letreiro):**
+- **Linha 1:** "Aperte o botão para gerar o QRCode!" (fixo no topo)
+- **Linha 2-3:** Letreiro horizontal rotativo com:
+  - `Maior doador: [PrimeiroNome SegundoNome] (R$[valor])   |  Último doador: [PrimeiroNome SegundoNome]`
+- **Scroll:** Texto se move da direita para esquerda como letreiro de ônibus
+- **Nomes:** Apenas primeiros 2 nomes (ex: "João Victor Silva" → "João Victor")
+- **Atualização:** Dados buscados do Firebase automaticamente
+
+**2. Ao Pressionar Botão:**
+- **Limpa display** completamente
+- **Mostra QR Code** centralizado que leva para o formulário web
+- **Sem texto** adicional durante exibição do QR
+- **Duração:** Exatamente 30 segundos
+- **Após 30s:** Retorna automaticamente para tela inicial
+
+**3. Lógica de Nomes:**
+```cpp
+// Função para extrair primeiros 2 nomes
+String extractFirstTwoNames(String fullName) {
+    int firstSpace = fullName.indexOf(' ');
+    if (firstSpace == -1) return fullName; // Só um nome
+    
+    int secondSpace = fullName.indexOf(' ', firstSpace + 1);
+    if (secondSpace == -1) return fullName; // Só dois nomes
+    
+    return fullName.substring(0, secondSpace); // Primeiros 2 nomes
+}
+```
+
+#### Implementação Técnica:
+
+**Variáveis Globais Necessárias:**
+```cpp
+bool showingQR = false;
+unsigned long qrStartTime = 0;
+int scrollPosition = 0;
+unsigned long lastScrollTime = 0;
+String marqueeText = "";
+const int SCROLL_DELAY = 200; // ms entre movimentos
+const int QR_DISPLAY_TIME = 30000; // 30 segundos
+```
+
+**Função Principal do Display:**
+```cpp
+void updateDisplay() {
+    if (showingQR) {
+        // Verifica se passou 30 segundos
+        if (millis() - qrStartTime >= QR_DISPLAY_TIME) {
+            showingQR = false;
+            scrollPosition = 0; // Reset scroll
+        } else {
+            displayQRCode(); // Mostra apenas QR Code
+            return;
+        }
+    }
+    
+    // Tela normal com letreiro
+    display.clearDisplay();
+    
+    // Linha 1: Instrução fixa
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("Aperte o botao para");
+    display.setCursor(0, 8);
+    display.println("gerar o QRCode!");
+    
+    // Prepara texto do letreiro
+    updateMarqueeText();
+    
+    // Exibe letreiro com scroll
+    displayScrollingText();
+    
+    display.display();
+}
+
+void updateMarqueeText() {
+    String topDonorShort = extractFirstTwoNames(topDonor);
+    String lastDonorShort = extractFirstTwoNames(lastDonor);
+    
+    marqueeText = "Maior doador: " + topDonorShort + " (R$" + 
+                  String(topAmount, 2) + ")   |  Ultimo doador: " + 
+                  lastDonorShort + "     "; // Espaços para continuidade
+}
+
+void displayScrollingText() {
+    if (millis() - lastScrollTime >= SCROLL_DELAY) {
+        scrollPosition++;
+        if (scrollPosition >= marqueeText.length() * 6) { // 6 pixels por char
+            scrollPosition = 0;
+        }
+        lastScrollTime = millis();
+    }
+    
+    // Desenha texto com offset de scroll
+    display.setTextSize(1);
+    display.setCursor(-scrollPosition, 20);
+    display.print(marqueeText);
+    
+    // Continua o texto para efeito contínuo
+    display.setCursor(-scrollPosition + marqueeText.length() * 6, 20);
+    display.print(marqueeText);
+}
+```
+
+**Função de Botão:**
+```cpp
+void onButtonPress() {
+    showingQR = true;
+    qrStartTime = millis();
+    displayQRCode();
+}
+
+void displayQRCode() {
+    display.clearDisplay();
+    
+    // Gerar e exibir QR Code centralizado
+    // URL do formulário: "https://webhook-coffee.vercel.app"
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(
+        "https://webhook-coffee.vercel.app", 
+        qrcodegen::QrCode::Ecc::MEDIUM
+    );
+    
+    // Desenhar QR Code centralizado no display
+    int size = qr.getSize();
+    int scale = min(display.width() / size, display.height() / size);
+    int offsetX = (display.width() - size * scale) / 2;
+    int offsetY = (display.height() - size * scale) / 2;
+    
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            if (qr.getModule(x, y)) {
+                display.fillRect(offsetX + x * scale, offsetY + y * scale, 
+                               scale, scale, BLACK);
+            }
+        }
+    }
+    
+    display.display();
+}
+```
+
+#### Fluxo de Estados:
+1. **Boot → Tela Inicial** (letreiro rotativo)
+2. **Botão pressionado → QR Code** (30s fixos)
+3. **Timeout → Tela Inicial** (reinicia letreiro)
+4. **Dados atualizados → Atualiza letreiro** (sem piscar)
+
+#### Bibliotecas Necessárias:
+```cpp
+#include <qrcodegen.hpp>  // Para QR Code
+// Display libraries já incluídas (Adafruit_PCD8544, etc.)
+```
+
 ### IMPORTANTE: Fase 1 implementada e funcionando
 - **Display OLED** agora mostra saldo, doadores e IP
 - **Sistema continua** processando pagamentos normalmente
@@ -521,3 +690,62 @@ Keypad customKeypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 - **Fase 4:** Interface Web Responsiva
 - **Fase 5:** Teclado Físico
 - **Fase 6:** Webhook Update para Doações Anônimas
+
+
+
+## Project-Specific Display Information (Nokia 5110 LCD)
+
+This section documents the setup and usage logic for the Nokia 5110 LCD display in this PlatformIO project.
+
+**Display Type:** Nokia 5110 LCD (PCD8544 controller)
+**Project Path:** `C:\Users\victo\OneDrive\Documentos\PlatformIO\Projects\teste_tela`
+
+**Libraries Used:**
+*   `Adafruit GFX Library` (for graphics primitives)
+*   `Adafruit PCD8544 Nokia 5110 LCD library` (specific display driver)
+*   `SPI` (for communication)
+
+**Working Pin Connections (ESP32 to Nokia 5110):**
+These pins were confirmed by the user to be working correctly.
+*   `SCLK_PIN` (CLK) -> ESP32 GPIO 18
+*   `DIN_PIN` (DIN) -> ESP32 GPIO 23
+*   `DC_PIN` (D/C) -> ESP32 GPIO 19
+*   `CS_PIN` (CE) -> ESP32 GPIO 5
+*   `RST_PIN` (RST) -> ESP32 GPIO 14
+
+**Display Usage Logic:**
+
+1.  **Initialization:**
+    *   Include necessary headers: `#include <Adafruit_GFX.h>`, `#include <Adafruit_PCD8544.h>`, `#include <SPI.h>`.
+    *   Define pin constants (as above).
+    *   Create `Adafruit_PCD8544` object: `Adafruit_PCD8544 display = Adafruit_PCD8544(SCLK_PIN, DIN_PIN, DC_PIN, CS_PIN, RST_PIN);`
+    *   In `setup()`:
+        *   `display.begin();`
+        *   `display.setContrast(55);` (adjust as needed)
+
+2.  **Drawing Process (Buffer-based):**
+    *   The display uses an internal memory buffer. All drawing operations are performed on this buffer first.
+    *   `display.clearDisplay();`: Clears the entire buffer.
+
+3.  **Drawing Primitives:**
+    *   **Text:**
+        *   `display.setTextSize(1);`
+        *   `display.setTextColor(BLACK);`
+        *   `display.setCursor(x, y);`
+        *   `display.println("Your Text");`
+    *   **Bitmaps (Images):**
+        *   Images must be converted to a C/C++ byte array (`static const unsigned char PROGMEM your_bitmap_name[] = { ... };`).
+        *   **Dimensions:** Nokia 5110 is 84x48 pixels. A monochrome image of this size requires 504 bytes.
+        *   **Format:** 1 bit per pixel, **Vertical bytes (column-major)**, **MSB first**.
+        *   **Tool:** `image2cpp` (https://javl.github.io/image2cpp/) is recommended for conversion. Ensure "Output format: Vertical bytes" and "Bit order: MSB first" are selected.
+        *   **Drawing function:** `display.drawBitmap(x, y, your_bitmap_name, width, height, BLACK);`
+
+4.  **Displaying Content:**
+    *   **`display.display();`**: This is crucial. It sends the content from the memory buffer to the physical LCD screen. Without this call, nothing will appear.
+
+**Common Issues Encountered and Solutions:**
+*   **Garbled/Scattered Pixels:** Usually incorrect pin connections or incorrect byte/bit order from `image2cpp`.
+*   **Image "Nothing Like Expected":** Incorrect byte/bit order from `image2cpp` (e.g., Horizontal bytes instead of Vertical, or LSB first instead of MSB).
+*   **Compilation Error `expected ',' or ';' before 'void setup()'`:** Missing semicolon `;` after a global variable/array definition (e.g., after the bitmap array).
+
+```
