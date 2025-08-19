@@ -136,12 +136,12 @@ void updateMarqueeText() {
     marqueeTextLine2 = removeAccents("Ultimo doador: ") + lastDonorShort + "     "; // Applied removeAccents
 }
 
-// Generic scrolling function
+// Generic scrolling function - cria substring visível para evitar quebra de linha
 void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& lastScrollTimeVar, int yPos) {
     if (millis() - lastScrollTimeVar >= SCROLL_DELAY) {
         scrollPos++;
-        // 6 pixels de largura por caractere (default font size 1)
-        if (scrollPos >= textToScroll.length() * 6) { 
+        // Reinicia quando o scroll passou por todo o texto
+        if (scrollPos >= textToScroll.length()) { 
             scrollPos = 0;
         }
         lastScrollTimeVar = millis();
@@ -150,11 +150,23 @@ void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& l
     // Limpa apenas a região específica desta linha (altura de 8 pixels para font size 1)
     display.fillRect(0, yPos, display.width(), 8, WHITE);
     
-    // Define posição e configurações apenas para esta linha
+    // Define configurações de texto
     display.setTextSize(1);
     display.setTextColor(BLACK);
-    display.setCursor(-scrollPos, yPos);
-    display.print(textToScroll);
+    
+    // Nokia 5110 tem 84 pixels de largura, com fonte size 1 cabe ~14 caracteres
+    const int maxChars = 14;
+    
+    // Cria substring que vai ser exibida (rotacionando através do texto)
+    String visibleText = "";
+    for (int i = 0; i < maxChars; i++) {
+        int charIndex = (scrollPos + i) % textToScroll.length();
+        visibleText += textToScroll.charAt(charIndex);
+    }
+    
+    // Desenha o texto visível na posição fixa
+    display.setCursor(0, yPos);
+    display.print(visibleText);
 }
 
 void displayQRCode() {
