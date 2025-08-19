@@ -85,7 +85,7 @@ int scrollPositionLine1 = 0;
 int scrollPositionLine2 = 0;
 unsigned long lastScrollTimeLine1 = 0;
 unsigned long lastScrollTimeLine2 = 0;
-const int SCROLL_DELAY = 200; // ms
+const int SCROLL_DELAY = 50; // ms - mais rápido para rolagem pixel por pixel suave
 const int QR_DISPLAY_TIME = 30000; // 30s
 
 // --- Nokia 5110 Display Functions ---
@@ -136,12 +136,12 @@ void updateMarqueeText() {
     marqueeTextLine2 = removeAccents("Ultimo doador: ") + lastDonorShort + "     "; // Applied removeAccents
 }
 
-// Generic scrolling function - cria substring visível para evitar quebra de linha
+// Generic scrolling function - apenas desenha caracteres totalmente visíveis
 void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& lastScrollTimeVar, int yPos) {
     if (millis() - lastScrollTimeVar >= SCROLL_DELAY) {
         scrollPos++;
-        // Reinicia quando o scroll passou por todo o texto
-        if (scrollPos >= textToScroll.length()) { 
+        // Reinicia quando o scroll passou por todo o texto (6 pixels por caractere)
+        if (scrollPos >= textToScroll.length() * 6) { 
             scrollPos = 0;
         }
         lastScrollTimeVar = millis();
@@ -154,19 +154,32 @@ void displayScrollingLine(String& textToScroll, int& scrollPos, unsigned long& l
     display.setTextSize(1);
     display.setTextColor(BLACK);
     
-    // Nokia 5110 tem 84 pixels de largura, com fonte size 1 cabe ~14 caracteres
-    const int maxChars = 14;
+    // Cria texto que vai rolar de forma circular
+    String extendedText = textToScroll + "     "; // Adiciona espaços para separação
     
-    // Cria substring que vai ser exibida (rotacionando através do texto)
-    String visibleText = "";
-    for (int i = 0; i < maxChars; i++) {
-        int charIndex = (scrollPos + i) % textToScroll.length();
-        visibleText += textToScroll.charAt(charIndex);
+    // Calcula qual caractere começar e o offset em pixels
+    int charStart = scrollPos / 6;
+    int pixelOffset = scrollPos % 6;
+    
+    // Apenas desenha caracteres que estão completamente dentro da tela (0 a 78 pixels)
+    int currentX = -pixelOffset;
+    
+    for (int i = 0; i < extendedText.length(); i++) {
+        int charIndex = (charStart + i) % extendedText.length();
+        
+        // Só desenha se o caractere está completamente visível (X entre 0 e 78)
+        if (currentX >= 0 && currentX <= 78) {
+            display.setCursor(currentX, yPos);
+            display.print(extendedText.charAt(charIndex));
+        }
+        
+        currentX += 6; // Avança 6 pixels por caractere
+        
+        // Para se passou da área visível
+        if (currentX > 84) {
+            break;
+        }
     }
-    
-    // Desenha o texto visível na posição fixa
-    display.setCursor(0, yPos);
-    display.print(visibleText);
 }
 
 void displayQRCode() {
