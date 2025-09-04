@@ -1,8 +1,8 @@
 window.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 SCRIPT TV CARREGADO!');
+    console.log('🚀 SCRIPT TV CARREGADO (v2)!');
 
-    // Gera o QR Code
-    new QRCode(document.getElementById('qrcode'), {
+    // Gera o QR Code no novo container
+    new QRCode(document.getElementById('qrcode-container'), {
         text: 'https://webhook-coffee.vercel.app/',
         width: 256,
         height: 256,
@@ -11,79 +11,85 @@ window.addEventListener('DOMContentLoaded', function() {
         correctLevel : QRCode.CorrectLevel.H
     });
 
-    // Funções de carregamento inicial
+    // Carregamento inicial e agendado
     loadData();
     loadHistory();
-
-    // Atualiza os dados a cada 10 segundos
     setInterval(loadData, 10000);
-    // Atualiza o histórico a cada 30 segundos
-    setInterval(loadHistory, 30000);
+    setInterval(loadHistory, 60000); // Histórico pode atualizar mais devagar
 });
 
+// Função para buscar dados de saldo e doadores
 async function loadData() {
     try {
-        console.log('💰 Buscando saldo e doadores...');
         const response = await fetch('/api/get-current-balance');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
         const data = await response.json();
-        console.log('📋 Dados recebidos:', data);
 
-        // Formata o valor para BRL
-        const formattedBalance = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
+        // Saldo
+        document.getElementById('current-balance').textContent = `R$ ${data.total_amount.toFixed(2).replace('.', ',')}`;
 
-        // Atualiza o DOM
-        document.getElementById('current-balance').textContent = formattedBalance;
-        document.getElementById('last-donor').textContent = data.last_donor || 'Ninguém ainda';
-        document.getElementById('top-donor').textContent = data.top_donor || 'Ninguém ainda';
+        // Último doador
+        const lastName = data.last_donor || 'Aguardando...';
+        document.getElementById('last-donor-name').textContent = lastName;
+        document.getElementById('last-donor-initial').textContent = lastName.charAt(0).toUpperCase();
 
-        console.log('✅ Dados de saldo e doadores atualizados!');
+        // Maior doador
+        const topName = data.top_donor || 'Aguardando...';
+        document.getElementById('top-donor-name').textContent = topName;
+        document.getElementById('top-donor-initial').textContent = topName.charAt(0).toUpperCase();
+        document.getElementById('top-donor-amount').textContent = data.top_amount ? `+ R$${data.top_amount.toFixed(2).replace('.', ',')}` : '';
 
     } catch (error) {
         console.error('❌ Erro ao buscar dados de saldo:', error);
     }
 }
 
+// Função para buscar e construir o histórico de rolagem
 async function loadHistory() {
     try {
-        console.log('📜 Buscando histórico de doações...');
         const response = await fetch('/api/get-donation-history');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const history = await response.json();
-        console.log('📋 Histórico recebido:', history);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+        const data = await response.json();
 
-        const historyContainer = document.getElementById('donation-history');
-        
-        if (history.length === 0) {
-            historyContainer.innerHTML = '<p style="text-align: center; font-size: 1.5vw;">Nenhuma doação ainda.</p>';
+        if (!data.success || !data.history || data.history.length === 0) {
+            console.log('📜 Histórico vazio ou com erro.');
             return;
         }
 
-        // Cria a tabela
-        let tableHTML = '<table><thead><tr><th>Doador</th><th>Valor</th><th>Data</th></tr></thead><tbody>';
-        
-        history.forEach(donation => {
-            const donationDate = new Date(donation.timestamp.seconds * 1000);
-            const formattedDate = donationDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + donationDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            const formattedValue = `R$ ${donation.amount.toFixed(2).replace('.', ',')}`;
+        const historyWrapper = document.getElementById('history-wrapper');
+        historyWrapper.innerHTML = ''; // Limpa o conteúdo anterior
 
-            tableHTML += `
-                <tr>
-                    <td>${donation.name}</td>
-                    <td>${formattedValue}</td>
-                    <td>${formattedDate}</td>
-                </tr>
+        // Array de cores para os ícones, para dar variedade
+        const colors = [
+            'bg-pink-400/20 text-pink-300',
+            'bg-blue-400/20 text-blue-300',
+            'bg-yellow-400/20 text-yellow-300',
+            'bg-indigo-400/20 text-indigo-300',
+            'bg-green-400/20 text-green-300',
+            'bg-red-400/20 text-red-300',
+            'bg-orange-400/20 text-orange-300',
+            'bg-sky-400/20 text-sky-300',
+        ];
+
+        let historyContent = '';
+        data.history.forEach((donation, index) => {
+            const colorClass = colors[index % colors.length]; // Seleciona uma cor do array
+            const initial = (donation.donor_name || '?').charAt(0).toUpperCase();
+            const amount = `+ R$${(donation.amount || 0).toFixed(2).replace('.', ',')}`;
+
+            historyContent += `
+                <div class="flex items-center gap-3 mx-4">
+                    <span class="${colorClass} text-sm font-semibold w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0">${initial}</span>
+                    <div>
+                        <p class="text-sm font-semibold text-white">${donation.donor_name || 'Anônimo'}</p>
+                        <p class="text-xs text-green-400 font-bold">${amount}</p>
+                    </div>
+                </div>
             `;
         });
 
-        tableHTML += '</tbody></table>';
-        historyContainer.innerHTML = tableHTML;
-
-        console.log('✅ Histórico de doações atualizado!');
+        // Duplica o conteúdo para o efeito de rolagem contínua
+        historyWrapper.innerHTML = historyContent + historyContent;
 
     } catch (error) {
         console.error('❌ Erro ao buscar histórico:', error);
