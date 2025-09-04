@@ -24,7 +24,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4 pb-24 sm:pb-4">
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4 pt-32 sm:pt-4">
 
     <div class="w-full max-w-4xl bg-gray-800 rounded-3xl shadow-2xl shadow-purple-500/10 overflow-hidden">
         <div class="grid md:grid-cols-2">
@@ -61,7 +61,9 @@
                                 <span id="top-donor-initial" class="bg-purple-400/20 text-purple-300 text-lg font-semibold w-10 h-10 flex items-center justify-center rounded-full">?</span>
                                 <p id="top-donor-name" class="text-xl font-semibold text-white">Aguardando...</p>
                             </div>
-                            <p id="top-donor-amount" class="text-xl font-bold text-green-400"></p>
+                            <div id="top-donor-amount-wrapper" class="flex items-center text-xl font-bold text-green-400">
+                                <!-- O valor será preenchido aqui, ex: <span>+</span><span>R$50,00</span> -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -69,11 +71,11 @@
         </div>
     </div>
     
-    <footer id="history-scroller" class="fixed bottom-0 left-0 w-full bg-gray-900/50 backdrop-blur-sm overflow-hidden py-3 border-t border-gray-700/50">
+    <header id="history-scroller" class="fixed top-0 left-0 w-full bg-gray-900/50 backdrop-blur-sm overflow-hidden py-5 border-b border-gray-700/50">
         <div id="history-wrapper" class="scrolling-wrapper flex whitespace-nowrap">
             <!-- Histórico será preenchido pelo script -->
         </div>
-    </footer>
+    </header>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="/tv-script.js"></script>
